@@ -1,0 +1,16 @@
+import { BarChart3 } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { MatchDetailData } from "@/types/match";
+import { SectionHeader } from "@/components/match/SectionHeader";
+
+const copy = { title: "\u6bd4\u5206\u9884\u6d4b", description: "Top 5 \u6bd4\u5206\u6982\u7387\u4e0e\u53cc\u65b9\u8fdb\u7403\u5206\u5e03\u3002", highest: "\u6700\u9ad8\u6982\u7387\u6bd4\u5206", homeGoals: "\u4e3b\u961f\u8fdb\u7403\u5206\u5e03", awayGoals: "\u5ba2\u961f\u8fdb\u7403\u5206\u5e03", note: "\u9996\u9009\u6bd4\u5206", suffix: "\u7684\u6a21\u578b\u6982\u7387\u4e3a", disclaimer: "\uff0c\u4e0d\u4ee3\u8868\u6bd4\u8d5b\u7ed3\u679c\u627f\u8bfa\u3002" };
+
+export function ScorePrediction({ match }: { match: MatchDetailData }) {
+  const first = match.scoreProbabilities[0];
+  return <section id="score-prediction" className="scroll-mt-24"><SectionHeader icon={BarChart3} title={copy.title} description={copy.description} /><Card><CardHeader className="pb-3"><CardTitle className="text-sm">{copy.highest}</CardTitle></CardHeader><CardContent><div className="space-y-3">{match.scoreProbabilities.map((item, index) => <div key={item.score} className="flex items-center gap-3"><span className={["w-10 shrink-0 text-sm font-semibold", index === 0 ? "text-blue-300" : "text-slate-300"].join(" ")}>{item.score}</span><div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-800"><div className={["h-full rounded-full", index === 0 ? "bg-blue-500" : "bg-slate-600"].join(" ")} style={{ width: item.probability + "%" }} /></div><span className={index === 0 ? "w-10 text-right text-sm font-semibold text-blue-300" : "w-10 text-right text-sm text-slate-400"}>{item.probability}%</span></div>)}</div><div className="mt-5 grid gap-5 border-t border-slate-800 pt-5 md:grid-cols-2"><GoalColumn title={copy.homeGoals} team={match.home.name} values={match.goalDistribution.map((item) => ({ label: item.label, value: item.home }))} accent="blue" /><GoalColumn title={copy.awayGoals} team={match.away.name} values={match.goalDistribution.map((item) => ({ label: item.label, value: item.away }))} accent="green" /></div><p className="mt-4 text-[11px] text-slate-500">{copy.note} {first.score} {copy.suffix} {first.probability}%{copy.disclaimer}</p></CardContent></Card></section>;
+}
+
+function GoalColumn({ title, team, values, accent }: { title: string; team: string; values: { label: string; value: number }[]; accent: "blue" | "green" }) {
+  const bar = accent === "blue" ? "bg-blue-500" : "bg-green-500";
+  return <div><div className="mb-3 flex items-end justify-between gap-2"><div><p className="text-sm font-medium text-white">{title}</p><p className="mt-1 text-[11px] text-slate-500">{team}</p></div><span className="text-[10px] text-slate-600">xG distribution</span></div><div className="space-y-2">{values.map((item) => <div key={item.label} className="flex items-center gap-2 text-xs"><span className="w-10 text-slate-500">{item.label}</span><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800"><div className={["h-full rounded-full", bar].join(" ")} style={{ width: item.value + "%" }} /></div><span className="w-8 text-right text-slate-300">{item.value}%</span></div>)}</div></div>;
+}

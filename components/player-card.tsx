@@ -1,0 +1,7 @@
+import { Activity, Goal, Trophy } from "lucide-react";
+import { Player } from "@/types";
+import { Card } from "@/components/ui/card";
+
+export function PlayerCard({ player }: { player: Player }) {
+  return <Card className="p-4 transition-colors hover:border-slate-700"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500/30 to-slate-800 text-xs font-semibold text-blue-300 ring-1 ring-blue-400/20">{player.avatar}</div><div className="min-w-0"><p className="truncate text-sm font-medium text-white">{player.name}</p><p className="mt-0.5 text-xs text-slate-500">{player.team} · {player.position}</p></div><div className="ml-auto flex items-center gap-1 text-sm font-semibold text-amber-400"><Trophy className="h-3.5 w-3.5" />{player.rating}</div></div><div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-800 pt-3 text-center"><div><Goal className="mx-auto h-3.5 w-3.5 text-slate-500" /><p className="mt-1 text-sm font-medium text-slate-200">{player.goals}</p><p className="text-[10px] text-slate-500">进球</p></div><div><Activity className="mx-auto h-3.5 w-3.5 text-slate-500" /><p className="mt-1 text-sm font-medium text-slate-200">{player.assists}</p><p className="text-[10px] text-slate-500">助攻</p></div><div><span className="text-xs text-slate-500">xG</span><p className="mt-1 text-sm font-medium text-slate-200">{(player.goals * 0.09 + 1.2).toFixed(1)}</p><p className="text-[10px] text-slate-500">预期进球</p></div></div></Card>;
+}

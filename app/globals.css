@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 222 47% 11%;
+  --foreground: 210 40% 98%;
+  --card: 217 33% 17%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 210 40% 98%;
+  --muted: 215 28% 17%;
+  --muted-foreground: 215 20% 65%;
+  --accent: 215 28% 19%;
+  --accent-foreground: 210 40% 98%;
+  --border: 215 28% 21%;
+  --input: 215 28% 21%;
+  --ring: 217 91% 60%;
+  --radius: 0.75rem;
+}
+
+* { @apply border-border; }
+html { scroll-behavior: smooth; }
+body { @apply bg-background text-foreground antialiased; font-family: Inter, Arial, Helvetica, sans-serif; }
+
+@layer base {
+  h1, h2, h3, h4 { letter-spacing: -0.025em; }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .grid-glow { background-image: linear-gradient(rgba(148, 163, 184, 0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(148, 163, 184, 0.035) 1px, transparent 1px); background-size: 32px 32px; }
+}
