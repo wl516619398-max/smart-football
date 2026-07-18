@@ -6,6 +6,22 @@ export type MatchTeam = {
   secondaryColor: string;
 };
 
+export type AITeamStats = {
+  attack: number;
+  defense: number;
+  form: number;
+  homeAdvantage: number;
+};
+
+export interface MatchAIAnalysis {
+  attackScore: number;
+  defenseScore: number;
+  formScore: number;
+  homeAwayScore: number;
+  possessionScore: number;
+  upsetRisk: number;
+}
+
 export type MatchRisk = "低" | "中" | "高";
 
 export type FeaturedMatch = {
@@ -22,6 +38,55 @@ export type FeaturedMatch = {
   homeWin: number;
   draw: number;
   awayWin: number;
+};
+
+export type CommercialTeamStats = {
+  name: string;
+  shortName: string;
+  color: string;
+  form: ("W" | "D" | "L")[];
+  goalsFor: number;
+  goalsAgainst: number;
+  venueWinRate: number;
+  venueLabel: string;
+};
+
+export type CommercialPlayer = {
+  name: string;
+  team: string;
+  avatar: string;
+  rating: number;
+  goals: number;
+  assists: number;
+};
+
+export type OddsTrendData = {
+  market: string;
+  initial: string;
+  current: string;
+  trend: string;
+};
+
+export type CommercialMatchData = {
+  prediction: {
+    homeWin: number;
+    draw: number;
+    awayWin: number;
+    score: string;
+    confidence: number;
+  };
+  teams: {
+    home: CommercialTeamStats;
+    away: CommercialTeamStats;
+  };
+  players: CommercialPlayer[];
+  odds: OddsTrendData;
+  report: {
+    summary: string;
+    lean: string;
+    risk: string;
+  };
+  vipFeatures: string[];
 };
 
 export type MatchPrediction = {
@@ -118,6 +183,9 @@ export type MatchDetailData = {
   updatedAt: string;
   home: MatchTeam;
   away: MatchTeam;
+  homeStats: AITeamStats;
+  awayStats: AITeamStats;
+  aiAnalysis: { home: MatchAIAnalysis; away: MatchAIAnalysis };
   prediction: MatchPrediction;
   probabilities: { label: string; value: number; color: string }[];
   lottery: LotteryRecommendation[];

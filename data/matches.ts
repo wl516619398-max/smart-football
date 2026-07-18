@@ -1,4 +1,5 @@
-import type { FeaturedMatch, MatchDetailData, MatchTeam } from "@/types/match";
+import type { CommercialMatchData, FeaturedMatch, MatchDetailData, MatchTeam } from "@/types/match";
+import type { FootballMatch, FootballTeamStats } from "@/lib/football/types";
 
 const manchesterUnited = {
   name: "\u66fc\u8054",
@@ -31,6 +32,12 @@ const baseMatchDetails: MatchDetailData[] = [
     updatedAt: "5 \u5206\u949f\u524d",
     home: manchesterUnited,
     away: liverpool,
+    homeStats: { attack: 84, defense: 78, form: 82, homeAdvantage: 92 },
+    awayStats: { attack: 86, defense: 78, form: 84, homeAdvantage: 50 },
+    aiAnalysis: {
+      home: { attackScore: 82, defenseScore: 79, formScore: 85, homeAwayScore: 90, possessionScore: 78, upsetRisk: 35 },
+      away: { attackScore: 88, defenseScore: 84, formScore: 87, homeAwayScore: 75, possessionScore: 86, upsetRisk: 35 },
+    },
     prediction: {
       lean: "\u66fc\u8054\u4e0d\u8d1f",
       firstChoice: "\u80dc\u5e73\u8d1f\uff1a\u4e3b\u80dc",
@@ -262,6 +269,9 @@ function createSupplementalMatch(config: {
   city: string;
   home: MatchTeam;
   away: MatchTeam;
+  homeStats: { attack: number; defense: number; form: number; homeAdvantage: number };
+  awayStats: { attack: number; defense: number; form: number; homeAdvantage: number };
+  aiAnalysis: { home: { attackScore: number; defenseScore: number; formScore: number; homeAwayScore: number; possessionScore: number; upsetRisk: number }; away: { attackScore: number; defenseScore: number; formScore: number; homeAwayScore: number; possessionScore: number; upsetRisk: number } };
   confidence: number;
   prediction: string;
   score: string;
@@ -284,6 +294,9 @@ function createSupplementalMatch(config: {
     updatedAt: "12 分钟前",
     home: config.home,
     away: config.away,
+    homeStats: config.homeStats,
+    awayStats: config.awayStats,
+    aiAnalysis: config.aiAnalysis,
     prediction: {
       lean: `${config.home.name}方向`,
       firstChoice: `胜平负：${config.prediction}`,
@@ -353,6 +366,12 @@ const supplementalMatchDetails: MatchDetailData[] = [
     city: "Madrid",
     home: realMadrid,
     away: barcelona,
+    homeStats: { attack: 88, defense: 82, form: 86, homeAdvantage: 90 },
+    awayStats: { attack: 84, defense: 78, form: 80, homeAdvantage: 52 },
+    aiAnalysis: {
+      home: { attackScore: 89, defenseScore: 84, formScore: 88, homeAwayScore: 91, possessionScore: 82, upsetRisk: 28 },
+      away: { attackScore: 86, defenseScore: 80, formScore: 81, homeAwayScore: 72, possessionScore: 88, upsetRisk: 28 },
+    },
     confidence: 76,
     prediction: "主胜",
     score: "2:1",
@@ -371,6 +390,12 @@ const supplementalMatchDetails: MatchDetailData[] = [
     city: "Munich",
     home: bayern,
     away: dortmund,
+    homeStats: { attack: 91, defense: 84, form: 88, homeAdvantage: 93 },
+    awayStats: { attack: 79, defense: 72, form: 74, homeAdvantage: 48 },
+    aiAnalysis: {
+      home: { attackScore: 93, defenseScore: 87, formScore: 90, homeAwayScore: 94, possessionScore: 85, upsetRisk: 18 },
+      away: { attackScore: 81, defenseScore: 75, formScore: 76, homeAwayScore: 69, possessionScore: 77, upsetRisk: 18 },
+    },
     confidence: 84,
     prediction: "主胜",
     score: "3:1",
@@ -382,6 +407,64 @@ const supplementalMatchDetails: MatchDetailData[] = [
 ];
 
 export const matchDetails: MatchDetailData[] = [...baseMatchDetails, ...supplementalMatchDetails];
+
+const footballTeamIds: Record<string, string> = {
+  "Manchester United": "manchester-united",
+  Liverpool: "liverpool",
+  "Real Madrid": "real-madrid",
+  "FC Barcelona": "barcelona",
+  "Bayern Munich": "bayern-munich",
+  "Borussia Dortmund": "borussia-dortmund",
+};
+
+function toFootballTeamId(team: MatchTeam): string {
+  return footballTeamIds[team.englishName] ?? team.englishName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+}
+
+function toFootballTeamStats(match: MatchDetailData, side: "home" | "away"): FootballTeamStats {
+  const team = match[side];
+  const stats = match[`${side}Stats`];
+  return {
+    teamId: toFootballTeamId(team),
+    attack: stats.attack,
+    defense: stats.defense,
+    form: stats.form,
+    homeAdvantage: stats.homeAdvantage,
+    possession: match.aiAnalysis[side].possessionScore,
+  };
+}
+
+export const footballMatchFallbacks: FootballMatch[] = matchDetails.map((match) => ({
+  id: match.id,
+  league: match.league,
+  homeTeam: { id: toFootballTeamId(match.home), name: match.home.name, shortName: match.home.shortName },
+  awayTeam: { id: toFootballTeamId(match.away), name: match.away.name, shortName: match.away.shortName },
+  date: `${match.date}T${match.time}:00`,
+  venue: match.venue,
+  odds: {
+    homeWin: match.probabilities[0]?.value ?? match.prediction.modelProbability,
+    draw: match.probabilities[1]?.value ?? 25,
+    awayWin: match.probabilities[2]?.value ?? 25,
+    asianHandicap: { initial: `${match.home.name} -0.25`, current: `${match.home.name} -0.5` },
+  },
+  stats: { home: toFootballTeamStats(match, "home"), away: toFootballTeamStats(match, "away") },
+  injuries: [],
+}));
+
+export function getFootballMatchesFallback(): FootballMatch[] {
+  return footballMatchFallbacks;
+}
+
+export function getFootballMatchFallback(id: string): FootballMatch | undefined {
+  return footballMatchFallbacks.find((match) => match.id === id);
+}
+
+export function getFootballTeamStatsFallback(teamId: string): FootballTeamStats {
+  const match = footballMatchFallbacks.find(({ homeTeam, awayTeam }) => homeTeam.id === teamId || awayTeam.id === teamId);
+  if (match?.homeTeam.id === teamId) return match.stats.home;
+  if (match?.awayTeam.id === teamId) return match.stats.away;
+  return { teamId, attack: 50, defense: 50, form: 50, homeAdvantage: 50, possession: 50 };
+}
 
 const featuredMeta: Record<string, Pick<FeaturedMatch, "aiScore" | "prediction" | "score" | "risk">> = {
   "manchester-united-vs-liverpool": { aiScore: 82, prediction: "主胜", score: "2:1", risk: "中" },
@@ -402,6 +485,27 @@ export const featured: FeaturedMatch[] = matchDetails.map((match) => ({
   ...featuredMeta[match.id],
 }));
 
+const commercialOverrides: Record<string, CommercialMatchData> = {
+  "manchester-united-vs-liverpool": {
+    prediction: { homeWin: 46, draw: 29, awayWin: 25, score: "2-1", confidence: 82 },
+    teams: {
+      home: { name: "曼联", shortName: "MUN", color: "#DA291C", form: ["W", "W", "D", "L", "W"], goalsFor: 12, goalsAgainst: 6, venueWinRate: 72, venueLabel: "主场胜率" },
+      away: { name: "利物浦", shortName: "LIV", color: "#C8102E", form: ["W", "W", "W", "D", "W"], goalsFor: 15, goalsAgainst: 5, venueWinRate: 68, venueLabel: "客场胜率" },
+    },
+    players: [
+      { name: "Bruno Fernandes", team: "曼联", avatar: "BF", rating: 8.1, goals: 2, assists: 3 },
+      { name: "Mohamed Salah", team: "利物浦", avatar: "MS", rating: 8.4, goals: 4, assists: 2 },
+    ],
+    odds: { market: "亚洲盘口", initial: "曼联 -0.25", current: "曼联 -0.5", trend: "主队支持增强" },
+    report: {
+      summary: "根据球队近期表现、进攻效率、防守稳定性、主客场因素综合分析，曼联在比赛主动权与主场环境上略占优势。",
+      lean: "主胜略占优势",
+      risk: "利物浦反击能力较强。",
+    },
+    vipFeatures: ["精准比分模型", "欧赔变化分析", "最近100场历史数据", "AI资金流判断"],
+  },
+};
+
 const aliases: Record<string, string> = {
   "man-utd-liverpool": "manchester-united-vs-liverpool",
 };
@@ -409,4 +513,30 @@ const aliases: Record<string, string> = {
 export function getMatchById(id: string) {
   const canonicalId = aliases[id] ?? id;
   return matchDetails.find((match) => match.id === canonicalId);
+}
+
+export function getCommercialMatchBySlug(slug: string): { match: MatchDetailData; commercial: CommercialMatchData } | undefined {
+  const match = getMatchById(slug);
+  if (!match) return undefined;
+  const commercial = commercialOverrides[match.id] ?? {
+    prediction: {
+      homeWin: match.probabilities[0]?.value ?? match.prediction.modelProbability,
+      draw: match.probabilities[1]?.value ?? 25,
+      awayWin: match.probabilities[2]?.value ?? 25,
+      score: match.prediction.score,
+      confidence: match.prediction.confidence,
+    },
+    teams: {
+      home: { name: match.home.name, shortName: match.home.shortName, color: match.home.color, form: ["W", "D", "W", "L", "W"], goalsFor: 10, goalsAgainst: 7, venueWinRate: 64, venueLabel: "主场胜率" },
+      away: { name: match.away.name, shortName: match.away.shortName, color: match.away.color, form: ["W", "W", "D", "W", "L"], goalsFor: 13, goalsAgainst: 8, venueWinRate: 61, venueLabel: "客场胜率" },
+    },
+    players: [
+      { name: "关键球员 A", team: match.home.name, avatar: "A", rating: 8.0, goals: 3, assists: 2 },
+      { name: "关键球员 B", team: match.away.name, avatar: "B", rating: 7.9, goals: 3, assists: 2 },
+    ],
+    odds: { market: "亚洲盘口", initial: match.home.name + " -0.25", current: match.home.name + " -0.5", trend: "主队支持增强" },
+    report: { summary: match.prediction.summary, lean: match.prediction.firstChoice, risk: "临场阵容和比赛节奏可能带来额外波动。" },
+    vipFeatures: ["精准比分模型", "欧赔变化分析", "最近100场历史数据", "AI资金流判断"],
+  };
+  return { match, commercial };
 }

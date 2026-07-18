@@ -2,7 +2,7 @@
 
 Project Athena 是一个深色科技风的 AI 足球赛事分析平台 MVP，帮助用户快速查看比赛预测、比分分析、球员数据、xG 指标和体彩玩法数据分析参考。
 
-当前版本使用 Mock Data 和浏览器 localStorage 模拟用户、收藏、VIP 与浏览记录状态，不连接数据库、真实 API、认证服务或支付系统。
+当前版本使用 Mock Data 和浏览器 localStorage 模拟用户、收藏、VIP 与浏览记录状态。足球数据已通过 `lib/football` 统一服务层预留真实接口，未配置接口地址时自动使用 Mock fallback。
 
 ## 技术栈
 
@@ -43,6 +43,12 @@ NEXT_PUBLIC_APP_NAME=Project Athena
 ~~~
 
 当前没有真实 API，因此不需要额外的密钥配置。
+
+配置 `FOOTBALL_API_BASE_URL` 后，足球服务会优先请求以下接口，失败时仍回退到 Mock 数据：
+
+- `GET /matches/upcoming`
+- `GET /matches/:id`
+- `GET /teams/:id/stats`
 
 ## 页面路由
 
