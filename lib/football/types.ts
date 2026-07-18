@@ -57,3 +57,42 @@ export type FootballMatch = {
   stats: FootballMatchStats;
   injuries: FootballInjury[];
 };
+
+export type ApiFootballEnvelope<T> = {
+  get: string;
+  errors: Record<string, string | string[]> | string[];
+  results: number;
+  response: T;
+};
+
+export type ApiFootballFixture = {
+  fixture: {
+    id: number;
+    date: string;
+    venue: { name: string | null };
+  };
+  league: { id: number; name: string; season: number };
+  teams: {
+    home: { id: number; name: string; logo: string | null };
+    away: { id: number; name: string; logo: string | null };
+  };
+  goals: { home: number | null; away: number | null };
+};
+
+export type ApiFootballTeamStatistics = {
+  team: { id: number; name: string; logo: string | null };
+  league: { id: number; name: string; season: number; standings?: boolean };
+  fixtures: {
+    played: { total: number | null };
+    wins: { total: number | null };
+    draws: { total: number | null };
+    loses: { total: number | null };
+  };
+  goals: {
+    for: { total: number | null; average: { total: string | null } };
+    against: { total: number | null; average: { total: string | null } };
+  };
+  form: string | null;
+  biggest?: { wins?: { home: string | null; away: string | null } };
+  lineups?: Array<{ formation: string; played: number }>;
+};
