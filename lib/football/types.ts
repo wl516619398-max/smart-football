@@ -12,6 +12,13 @@ export type FootballOdds = {
   asianHandicap?: { initial: string; current: string };
 };
 
+export type FootballRecentMatch = {
+  result: "win" | "draw" | "loss";
+  goalsFor: number;
+  goalsAgainst: number;
+  venue: "home" | "away";
+};
+
 export type FootballTeamStats = {
   teamId: string;
   attack: number;
@@ -19,6 +26,11 @@ export type FootballTeamStats = {
   form: number;
   homeAdvantage: number;
   possession: number;
+  recentMatches: FootballRecentMatch[];
+  goalsFor: number;
+  goalsAgainst: number;
+  xG: number;
+  rank: number;
 };
 
 export type FootballMatchStats = {

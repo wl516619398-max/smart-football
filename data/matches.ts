@@ -1,5 +1,6 @@
 import type { CommercialMatchData, FeaturedMatch, MatchDetailData, MatchTeam } from "@/types/match";
-import type { FootballMatch, FootballTeamStats } from "@/lib/football/types";
+import type { FootballMatch, FootballRecentMatch, FootballTeamStats } from "@/lib/football/types";
+import { predictMatch } from "@/lib/ai/predictor";
 
 const manchesterUnited = {
   name: "\u66fc\u8054",
@@ -406,7 +407,7 @@ const supplementalMatchDetails: MatchDetailData[] = [
   }),
 ];
 
-export const matchDetails: MatchDetailData[] = [...baseMatchDetails, ...supplementalMatchDetails];
+const mockMatchDetails: MatchDetailData[] = [...baseMatchDetails, ...supplementalMatchDetails];
 
 const footballTeamIds: Record<string, string> = {
   "Manchester United": "manchester-united",
@@ -424,6 +425,14 @@ function toFootballTeamId(team: MatchTeam): string {
 function toFootballTeamStats(match: MatchDetailData, side: "home" | "away"): FootballTeamStats {
   const team = match[side];
   const stats = match[`${side}Stats`];
+  const recentMatches: FootballRecentMatch[] = match.recentForm[side].map((recentMatch) => {
+    const [goalsFor, goalsAgainst] = recentMatch.score.split(":").map(Number);
+    return { result: recentMatch.result, goalsFor: goalsFor || 0, goalsAgainst: goalsAgainst || 0, venue: recentMatch.venue };
+  });
+  const teamStats = match.teamStats;
+  const goalsFor = (teamStats.find((item) => item.label === "场均进球")?.[side] ?? 1.5) * Math.max(recentMatches.length, 5);
+  const goalsAgainst = (teamStats.find((item) => item.label === "场均失球")?.[side] ?? 1.2) * Math.max(recentMatches.length, 5);
+  const xG = teamStats.find((item) => item.label === "场均 xG")?.[side] ?? 1.5;
   return {
     teamId: toFootballTeamId(team),
     attack: stats.attack,
@@ -431,10 +440,15 @@ function toFootballTeamStats(match: MatchDetailData, side: "home" | "away"): Foo
     form: stats.form,
     homeAdvantage: stats.homeAdvantage,
     possession: match.aiAnalysis[side].possessionScore,
+    recentMatches,
+    goalsFor,
+    goalsAgainst,
+    xG,
+    rank: side === "home" ? 6 : 4,
   };
 }
 
-export const footballMatchFallbacks: FootballMatch[] = matchDetails.map((match) => ({
+export const footballMatchFallbacks: FootballMatch[] = mockMatchDetails.map((match) => ({
   id: match.id,
   league: match.league,
   homeTeam: { id: toFootballTeamId(match.home), name: match.home.name, shortName: match.home.shortName },
@@ -451,6 +465,22 @@ export const footballMatchFallbacks: FootballMatch[] = matchDetails.map((match) 
   injuries: [],
 }));
 
+const generatedPredictions = new Map(footballMatchFallbacks.map((match) => [match.id, predictMatch(match)]));
+
+export const matchDetails: MatchDetailData[] = mockMatchDetails.map((match) => {
+  const prediction = generatedPredictions.get(match.id);
+  if (!prediction) return match;
+  return {
+    ...match,
+    prediction: { ...match.prediction, confidence: prediction.confidence, score: prediction.score[0], modelProbability: prediction.homeWin },
+    probabilities: [
+      { label: "主胜", value: prediction.homeWin, color: "#2563EB" },
+      { label: "平局", value: prediction.draw, color: "#64748B" },
+      { label: "客胜", value: prediction.awayWin, color: "#22C55E" },
+    ],
+  };
+});
+
 export function getFootballMatchesFallback(): FootballMatch[] {
   return footballMatchFallbacks;
 }
@@ -463,7 +493,7 @@ export function getFootballTeamStatsFallback(teamId: string): FootballTeamStats 
   const match = footballMatchFallbacks.find(({ homeTeam, awayTeam }) => homeTeam.id === teamId || awayTeam.id === teamId);
   if (match?.homeTeam.id === teamId) return match.stats.home;
   if (match?.awayTeam.id === teamId) return match.stats.away;
-  return { teamId, attack: 50, defense: 50, form: 50, homeAdvantage: 50, possession: 50 };
+  return { teamId, attack: 50, defense: 50, form: 50, homeAdvantage: 50, possession: 50, recentMatches: [], goalsFor: 7.5, goalsAgainst: 7.5, xG: 1.5, rank: 20 };
 }
 
 const featuredMeta: Record<string, Pick<FeaturedMatch, "aiScore" | "prediction" | "score" | "risk">> = {
@@ -487,7 +517,13 @@ export const featured: FeaturedMatch[] = matchDetails.map((match) => ({
 
 const commercialOverrides: Record<string, CommercialMatchData> = {
   "manchester-united-vs-liverpool": {
-    prediction: { homeWin: 46, draw: 29, awayWin: 25, score: "2-1", confidence: 82 },
+    prediction: {
+      homeWin: generatedPredictions.get("manchester-united-vs-liverpool")?.homeWin ?? 0,
+      draw: generatedPredictions.get("manchester-united-vs-liverpool")?.draw ?? 0,
+      awayWin: generatedPredictions.get("manchester-united-vs-liverpool")?.awayWin ?? 0,
+      score: generatedPredictions.get("manchester-united-vs-liverpool")?.score[0] ?? "0-0",
+      confidence: generatedPredictions.get("manchester-united-vs-liverpool")?.confidence ?? 0,
+    },
     teams: {
       home: { name: "曼联", shortName: "MUN", color: "#DA291C", form: ["W", "W", "D", "L", "W"], goalsFor: 12, goalsAgainst: 6, venueWinRate: 72, venueLabel: "主场胜率" },
       away: { name: "利物浦", shortName: "LIV", color: "#C8102E", form: ["W", "W", "W", "D", "W"], goalsFor: 15, goalsAgainst: 5, venueWinRate: 68, venueLabel: "客场胜率" },
