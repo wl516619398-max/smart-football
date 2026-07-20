@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { MatchesBrowser, type MatchesResponse, type SyncedMatch } from "@/components/matches/MatchesBrowser";
+import { getUpcomingFixtures } from "@/lib/football/fixture-service";
+import { footballMatchesToMatchCenterRows } from "@/lib/football/match-center";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -10,22 +12,29 @@ export const metadata: Metadata = {
 async function getInitialMatches(): Promise<MatchesResponse> {
   const emptyResult: MatchesResponse = { success: false, data: [], total: 0, page: 1, pageSize: 20, totalPages: 0 };
   const supabase = getSupabaseServerClient();
-  if (!supabase) return emptyResult;
+  if (supabase) {
+    const { data, count, error } = await supabase
+      .from("matches")
+      .select("external_id,league,home_team,away_team,match_time,home_win,draw,away_win,ai_score", { count: "exact" })
+      .order("match_time", { ascending: true })
+      .range(0, 19);
 
-  const { data, count, error } = await supabase
-    .from("matches")
-    .select("external_id,league,home_team,away_team,match_time,home_win,draw,away_win,ai_score", { count: "exact" })
-    .order("match_time", { ascending: true })
-    .range(0, 19);
+    if (!error && data?.length) {
+      const matches = data as SyncedMatch[];
+      const total = count ?? matches.length;
+      return { success: true, data: matches, total, page: 1, pageSize: 20, totalPages: Math.ceil(total / 20) };
+    }
 
-  if (error) {
-    console.error("Failed to load initial matches:", error);
-    return emptyResult;
+    if (error) console.error("Failed to load initial matches, using football API fallback:", error);
   }
 
-  const matches = (data ?? []) as SyncedMatch[];
-  const total = count ?? matches.length;
-  return { success: true, data: matches, total, page: 1, pageSize: 20, totalPages: Math.ceil(total / 20) };
+  try {
+    const fallbackRows = footballMatchesToMatchCenterRows(await getUpcomingFixtures()).slice(0, 20);
+    return { success: fallbackRows.length > 0, data: fallbackRows, total: fallbackRows.length, page: 1, pageSize: 20, totalPages: fallbackRows.length ? 1 : 0 };
+  } catch (error) {
+    console.error("Failed to load football API fallback:", error);
+    return emptyResult;
+  }
 }
 
 export default async function MatchesPage() {

@@ -5,22 +5,9 @@ import { CalendarDays, ChevronLeft, ChevronRight, Filter, Search } from "lucide-
 import { MatchCard } from "@/components/match-card";
 import { Button } from "@/components/ui/button";
 import type { FeaturedMatch, MatchRisk, MatchTeam } from "@/types/match";
+import type { MatchCenterRow } from "@/lib/football/match-center";
 
-export type SyncedMatch = {
-  external_id: string;
-  league: string;
-  home_team: string;
-  away_team: string;
-  match_time: string;
-  home_logo?: string | null;
-  away_logo?: string | null;
-  home_win: number | null;
-  draw: number | null;
-  away_win: number | null;
-  ai_score: number | null;
-  ai_pick?: string | null;
-  risk_level?: string | null;
-};
+export type SyncedMatch = MatchCenterRow;
 
 export type MatchesResponse = {
   success: boolean;

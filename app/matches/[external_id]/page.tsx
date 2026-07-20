@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, BarChart3, CalendarDays, Clock3, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getFixtureDetail } from "@/lib/football/fixture-service";
+import { footballMatchToMatchCenterRow } from "@/lib/football/match-center";
 import { AIAnalysis } from "@/components/match/AIAnalysis";
 import { AIQuickAnalysis } from "@/components/match/AIQuickAnalysis";
 import { AIFocusFactors } from "@/components/match/AIFocusFactors";
@@ -52,20 +54,19 @@ type MatchRow = {
 
 async function getMatchByExternalId(externalId: string): Promise<MatchRow | null> {
   const supabase = getSupabaseServerClient();
-  if (!supabase) return null;
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("matches")
+      .select("*")
+      .eq("external_id", externalId)
+      .maybeSingle();
 
-  const { data, error } = await supabase
-    .from("matches")
-    .select("*")
-    .eq("external_id", externalId)
-    .maybeSingle();
-
-  if (error) {
-    console.error("Failed to load match detail:", error);
-    return null;
+    if (!error && data) return data as MatchRow;
+    if (error) console.error("Failed to load match detail, using football API fallback:", error);
   }
 
-  return data as MatchRow | null;
+  const fixture = await getFixtureDetail(externalId);
+  return fixture ? footballMatchToMatchCenterRow(fixture) as MatchRow : null;
 }
 
 function formatMatchTime(value: string | null) {

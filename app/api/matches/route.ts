@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getUpcomingFixtures } from "@/lib/football/fixture-service";
+import { footballMatchesToMatchCenterRows, type MatchCenterRow } from "@/lib/football/match-center";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -7,6 +9,32 @@ const MAX_PAGE_SIZE = 100;
 function positiveInteger(value: string | null, fallback: number) {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function filterAndPageFallback(rows: MatchCenterRow[], url: URL, page: number, pageSize: number) {
+  const date = url.searchParams.get("date")?.trim() ?? "";
+  const league = url.searchParams.get("league")?.trim() ?? "";
+  const search = url.searchParams.get("search")?.trim().toLowerCase() ?? "";
+  const filtered = rows
+    .filter((row) => !date || row.match_time.slice(0, 10) === date)
+    .filter((row) => !league || row.league === league)
+    .filter((row) => !search || `${row.home_team} ${row.away_team}`.toLowerCase().includes(search))
+    .sort((left, right) => new Date(left.match_time).getTime() - new Date(right.match_time).getTime());
+  const from = (page - 1) * pageSize;
+  const data = filtered.slice(from, from + pageSize);
+  const total = filtered.length;
+
+  return { success: true, data, total, page, pageSize, totalPages: Math.ceil(total / pageSize), source: "football-api" };
+}
+
+async function getFootballApiFallback(url: URL, page: number, pageSize: number) {
+  try {
+    const fixtures = await getUpcomingFixtures();
+    return filterAndPageFallback(footballMatchesToMatchCenterRows(fixtures), url, page, pageSize);
+  } catch (error) {
+    console.error("Failed to load football API fallback:", error);
+    return { success: false, data: [], total: 0, page, pageSize, totalPages: 0, source: "football-api" };
+  }
 }
 
 export async function GET(request: Request) {
@@ -18,7 +46,7 @@ export async function GET(request: Request) {
   const league = url.searchParams.get("league")?.trim() ?? "";
   const search = url.searchParams.get("search")?.trim() ?? "";
 
-  if (!supabase) return NextResponse.json({ success: false, data: [], total: 0, page, pageSize, totalPages: 0, error: "Supabase is not configured" }, { status: 503 });
+  if (!supabase) return NextResponse.json(await getFootballApiFallback(url, page, pageSize));
 
   try {
     let query = supabase.from("matches").select("external_id,league,home_team,away_team,match_time,home_win,draw,away_win,ai_score", { count: "exact" }).order("match_time", { ascending: true });
@@ -39,9 +67,13 @@ export async function GET(request: Request) {
     const { data, count, error } = await query.range(from, from + pageSize - 1);
     if (error) throw new Error(error.message);
 
-    const total = count ?? 0;
-    return NextResponse.json({ success: true, data: data ?? [], total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
-  } catch {
-    return NextResponse.json({ success: false, data: [], total: 0, page, pageSize, totalPages: 0 }, { status: 503 });
+    const rows = data ?? [];
+    if (!rows.length) return NextResponse.json(await getFootballApiFallback(url, page, pageSize));
+
+    const total = count ?? rows.length;
+    return NextResponse.json({ success: true, data: rows, total, page, pageSize, totalPages: Math.ceil(total / pageSize), source: "supabase" });
+  } catch (error) {
+    console.error("Failed to load matches from Supabase, using football API fallback:", error);
+    return NextResponse.json(await getFootballApiFallback(url, page, pageSize));
   }
 }
