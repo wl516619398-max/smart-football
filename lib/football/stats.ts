@@ -4,6 +4,7 @@ import type { ApiFootballFixture, FootballRecentMatch } from "@/lib/football/typ
 
 export type TeamRecentStats = {
   team: string;
+  recentMatches: FootballRecentMatch[];
   last10: {
     win: number;
     draw: number;
@@ -13,6 +14,13 @@ export type TeamRecentStats = {
     scored: number;
     conceded: number;
   };
+};
+
+export type TeamHeadToHeadMatch = {
+  home: string;
+  away: string;
+  score: string;
+  date: string;
 };
 
 function summarizeMatches(matches: FootballRecentMatch[]) {
@@ -90,6 +98,7 @@ async function getApiFootballRecentStats(teamId: string): Promise<TeamRecentStat
 
     return {
       team: parsed[0].teamName,
+      recentMatches: parsed.map((item) => item.match),
       ...summarizeMatches(parsed.map((item) => item.match)),
     };
   }
@@ -112,6 +121,22 @@ export async function getTeamRecentStats(teamId: string): Promise<TeamRecentStat
 
   return {
     team: team?.name ?? normalizedTeamId,
+    recentMatches: form.matches.slice(0, 10),
     ...summary,
   };
+}
+
+export async function getTeamHeadToHeadMatches(homeTeamId: string, awayTeamId: string): Promise<TeamHeadToHeadMatch[]> {
+  const response = await footballApiRawRequest<ApiFootballFixture[]>("fixtures", { h2h: `${homeTeamId}-${awayTeamId}` });
+  const fixtures = Array.isArray(response?.response) ? response.response : [];
+  return [...fixtures]
+    .filter((fixture) => Number.isFinite(fixture.goals?.home) && Number.isFinite(fixture.goals?.away))
+    .sort((left, right) => Date.parse(right.fixture.date) - Date.parse(left.fixture.date))
+    .slice(0, 10)
+    .map((fixture) => ({
+      home: fixture.teams.home.name,
+      away: fixture.teams.away.name,
+      score: `${fixture.goals.home}:${fixture.goals.away}`,
+      date: fixture.fixture.date.slice(0, 10),
+    }));
 }

@@ -30,6 +30,7 @@ import { OddsValueCard } from "@/components/match/OddsValueCard";
 import { Disclaimer } from "@/components/common/Disclaimer";
 import { CopyAnalysisButton } from "@/components/common/CopyAnalysisButton";
 import { MatchResearchInsights } from "@/components/match/MatchResearchInsights";
+import { DataSourceCard } from "@/components/match/DataSourceCard";
 import { getTeamDisplayName } from "@/lib/football/team-name-map";
 
 export const metadata: Metadata = {
@@ -296,9 +297,9 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
         <Card className="border-blue-500/20 bg-gradient-to-br from-[#111827] to-[#111d3a]">
           <CardHeader><div className="flex items-center gap-2 text-xs font-medium text-blue-300"><Sparkles className="h-4 w-4" />ATHENA AI PREDICTION</div><CardTitle className="mt-2 text-xl text-white">AI预测</CardTitle></CardHeader>
           <CardContent className="space-y-5">
-            <ProbabilityBar label="主队模型估算概率" value={match.home_win} tone="bg-blue-500" />
+            <ProbabilityBar label="主胜模型估算概率" value={engineContext.prediction.homeWin} tone="bg-blue-500" />
             <ProbabilityBar label="平局率" value={match.draw} tone="bg-slate-400" />
-            <ProbabilityBar label="客队模型估算概率" value={match.away_win} tone="bg-emerald-500" />
+            <ProbabilityBar label="客胜模型估算概率" value={engineContext.prediction.awayWin} tone="bg-emerald-500" />
             <div className="grid grid-cols-2 gap-3 border-t border-slate-800 pt-5 text-center"><div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4"><p className="text-xs text-slate-500">模型观点</p><p className="mt-2 text-lg font-semibold text-blue-300">{match.ai_pick || "分析生成中"}</p></div><div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4"><p className="text-xs text-slate-500">模型一致性</p><p className="mt-2 text-lg font-semibold text-emerald-400">{probability(match.ai_score)}</p></div></div>
           </CardContent>
         </Card>
@@ -320,6 +321,7 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
       </div>
 
       <AIAnalysis request={aiRequest} />
+      <div className="mt-6"><DataSourceCard generatedAt={new Date().toISOString()} /></div>
       <Disclaimer className="mt-8" />
     </main>
   );
