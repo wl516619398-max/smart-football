@@ -370,16 +370,16 @@ function createSportsDbSource(): RealFootballSource | null {
   };
 }
 
-function getConfiguredSource(): RealFootballSource | null {
-  const selected = process.env.FOOTBALL_API_PROVIDER?.trim().toLowerCase();
+function getConfiguredSource(sourceOverride?: RealFootballProviderName): RealFootballSource | null {
+  const selected = sourceOverride ?? process.env.FOOTBALL_API_PROVIDER?.trim().toLowerCase();
   if (selected === "football-data") return createFootballDataSource();
   if (selected === "api-football") return createApiFootballSource();
   if (selected === "thesportsdb") return createSportsDbSource();
   return createFootballDataSource() || createApiFootballSource() || createSportsDbSource();
 }
 
-export function createRealFootballAdapter(): FootballApiAdapter {
-  const source = getConfiguredSource();
+export function createRealFootballAdapter(sourceOverride?: RealFootballProviderName): FootballApiAdapter {
+  const source = getConfiguredSource(sourceOverride);
   const fallback = createMockFootballAdapter("api");
 
   async function withFallback<T>(remote: (() => Promise<T | null>) | undefined, fallbackCall: () => Promise<T>): Promise<T> {

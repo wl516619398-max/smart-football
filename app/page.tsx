@@ -8,6 +8,8 @@ import { fallbackHomeLeagues, fallbackHomeStats, latestInsights, type HomeLeague
 import { players } from "@/data/mock-data";
 import { predictMatch } from "@/lib/ai/predictor";
 import { getFootballDataProvider } from "@/lib/football/data-provider";
+import { getUpcomingFixturesWithSource } from "@/lib/football/fixture-service";
+import { getUpcomingDateWindow, isTodayOrFuture } from "@/lib/football/date-window";
 import type { FootballMatch } from "@/lib/football/types";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getPredictionHistorySummary } from "@/lib/history/prediction-history";
@@ -50,12 +52,24 @@ function toSyncedHomeMatch(match: FootballMatch): SyncedHomeMatch {
 }
 
 async function getHomeMatches(): Promise<HomeMatchesResult> {
+  try {
+    const liveResult = await getUpcomingFixturesWithSource();
+    const liveMatches = liveResult.matches.filter((match) => isTodayOrFuture(match.date));
+    if (liveResult.source === "football-api" && liveMatches.length) {
+      return { matches: liveMatches.slice(0, 3).map(toSyncedHomeMatch), useFallback: false };
+    }
+  } catch {
+    // Continue to database and provider fallbacks.
+  }
+
   const supabase = getSupabaseServerClient();
   if (supabase) {
     try {
+      const window = getUpcomingDateWindow();
       const { data, error } = await supabase
         .from("matches")
         .select("external_id,league,home_team,away_team,match_time,home_win,draw,away_win,ai_score")
+        .gte("match_time", window.start.toISOString())
         .order("match_time", { ascending: true })
         .limit(3);
 
@@ -68,10 +82,12 @@ async function getHomeMatches(): Promise<HomeMatchesResult> {
   }
 
   try {
-    const providerMatches = await getFootballDataProvider().getMatches();
-    if (providerMatches.length) {
+    const provider = getFootballDataProvider();
+    const providerMatches = await provider.getMatches();
+    const upcomingMatches = providerMatches.filter((match) => isTodayOrFuture(match.date));
+    if (provider.kind === "api" && upcomingMatches.length) {
       return {
-        matches: providerMatches.slice(0, 3).map(toSyncedHomeMatch),
+        matches: upcomingMatches.slice(0, 3).map(toSyncedHomeMatch),
         useFallback: false,
       };
     }
@@ -116,10 +132,22 @@ function getOverviewFromRows(rows: HomeMatchSummaryRow[]): { leagues: HomeLeague
 }
 
 async function getHomeOverview(): Promise<{ leagues: HomeLeagueSummary[]; stats: HomeOverviewStats }> {
+  try {
+    const liveResult = await getUpcomingFixturesWithSource();
+    const upcomingMatches = liveResult.matches.filter((match) => isTodayOrFuture(match.date));
+    if (liveResult.source === "football-api") {
+      const liveOverview = getOverviewFromRows(upcomingMatches.map((match) => ({ league: match.league, match_time: match.date })));
+      if (liveOverview) return liveOverview;
+    }
+  } catch {
+    // Continue to database and provider fallbacks.
+  }
+
   const supabase = getSupabaseServerClient();
   if (supabase) {
     try {
-      const { data, count, error } = await supabase.from("matches").select("league,match_time", { count: "exact" });
+      const window = getUpcomingDateWindow();
+      const { data, count, error } = await supabase.from("matches").select("league,match_time", { count: "exact" }).gte("match_time", window.start.toISOString());
       if (!error && data?.length) {
         const rows = data as HomeMatchSummaryRow[];
         return getOverviewFromRows(rows) ?? { leagues: fallbackHomeLeagues, stats: { ...fallbackHomeStats, matchCount: count ?? 0 } };

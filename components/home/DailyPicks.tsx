@@ -6,6 +6,9 @@ import { predictMatch } from "@/lib/prediction/engine";
 import type { PredictionTeamStats } from "@/lib/prediction/types";
 import { getPredictionHistory, summarizePredictionHistory } from "@/lib/history/prediction-history";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getUpcomingFixturesWithSource } from "@/lib/football/fixture-service";
+import { footballMatchesToMatchCenterRows } from "@/lib/football/match-center";
+import { getUpcomingDateWindow } from "@/lib/football/date-window";
 import { featured } from "@/data/matches";
 import type { FeaturedMatch } from "@/types/match";
 import type { HomeMatchesResult, SyncedHomeMatch } from "@/components/home/LiveHomeMatches";
@@ -70,10 +73,20 @@ function toPickInput(match: SyncedHomeMatch | FeaturedMatch) {
 }
 
 async function getDailyPicksMatches(): Promise<HomeMatchesResult> {
+  try {
+    const liveResult = await getUpcomingFixturesWithSource();
+    if (liveResult.source === "football-api" && liveResult.matches.length) {
+      return { matches: footballMatchesToMatchCenterRows(liveResult.matches) as SyncedHomeMatch[], useFallback: false };
+    }
+  } catch {
+    // Continue to database and local fallbacks.
+  }
+
   const supabase = getSupabaseServerClient();
   if (supabase) {
     try {
-      const { data, error } = await supabase.from("matches").select("external_id,league,home_team,away_team,match_time,home_win,draw,away_win,ai_score").order("match_time", { ascending: true }).limit(6);
+      const window = getUpcomingDateWindow();
+      const { data, error } = await supabase.from("matches").select("external_id,league,home_team,away_team,match_time,home_win,draw,away_win,ai_score").gte("match_time", window.start.toISOString()).order("match_time", { ascending: true }).limit(6);
       if (!error && data?.length) return { matches: data as SyncedHomeMatch[], useFallback: false };
     } catch {
       // Use Mock data when the database is unavailable.

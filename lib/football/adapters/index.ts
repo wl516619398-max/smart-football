@@ -1,6 +1,6 @@
 import type { FootballProviderKind } from "@/lib/football/data-provider";
 import { createMockFootballAdapter } from "@/lib/football/adapters/mock";
-import { createRealFootballAdapter } from "@/lib/football/adapters/real";
+import { createRealFootballAdapter, type RealFootballProviderName } from "@/lib/football/adapters/real";
 import type { FootballApiAdapter } from "@/lib/football/adapters/types";
 
 function normalizeProvider(value: string | undefined): FootballProviderKind {
@@ -18,12 +18,13 @@ function normalizeProvider(value: string | undefined): FootballProviderKind {
 
 export function getFootballApiAdapter(
   provider?: FootballProviderKind,
+  source?: RealFootballProviderName,
 ): FootballApiAdapter {
   const selectedProvider = provider ?? normalizeProvider(process.env.FOOTBALL_DATA_PROVIDER);
 
   switch (selectedProvider) {
     case "api":
-      return createRealFootballAdapter();
+      return createRealFootballAdapter(source);
     case "database":
     case "external":
       // Reserved adapters currently use Mock data until their integrations are added.

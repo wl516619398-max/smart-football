@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { getUpcomingFixtures } from "@/lib/football/fixture-service";
+import { getUpcomingFixturesWithSource } from "@/lib/football/fixture-service";
 import { footballMatchesToMatchCenterRows, type MatchCenterRow } from "@/lib/football/match-center";
+import { getUpcomingDateWindow, isTodayOrFuture, toShanghaiDateKey } from "@/lib/football/date-window";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -16,7 +17,7 @@ function filterAndPageFallback(rows: MatchCenterRow[], url: URL, page: number, p
   const league = url.searchParams.get("league")?.trim() ?? "";
   const search = url.searchParams.get("search")?.trim().toLowerCase() ?? "";
   const filtered = rows
-    .filter((row) => !date || row.match_time.slice(0, 10) === date)
+    .filter((row) => date ? toShanghaiDateKey(row.match_time) === date : isTodayOrFuture(row.match_time))
     .filter((row) => !league || row.league === league)
     .filter((row) => !search || `${row.home_team} ${row.away_team}`.toLowerCase().includes(search))
     .sort((left, right) => new Date(left.match_time).getTime() - new Date(right.match_time).getTime());
@@ -29,8 +30,8 @@ function filterAndPageFallback(rows: MatchCenterRow[], url: URL, page: number, p
 
 async function getFootballApiFallback(url: URL, page: number, pageSize: number) {
   try {
-    const fixtures = await getUpcomingFixtures();
-    return filterAndPageFallback(footballMatchesToMatchCenterRows(fixtures), url, page, pageSize);
+    const result = await getUpcomingFixturesWithSource();
+    return { ...filterAndPageFallback(footballMatchesToMatchCenterRows(result.matches), url, page, pageSize), source: result.source };
   } catch (error) {
     console.error("Failed to load football API fallback:", error);
     return { success: false, data: [], total: 0, page, pageSize, totalPages: 0, source: "football-api" };
@@ -46,7 +47,11 @@ export async function GET(request: Request) {
   const league = url.searchParams.get("league")?.trim() ?? "";
   const search = url.searchParams.get("search")?.trim() ?? "";
 
-  if (!supabase) return NextResponse.json(await getFootballApiFallback(url, page, pageSize));
+  const liveResult = await getUpcomingFixturesWithSource();
+  const liveResponse = filterAndPageFallback(footballMatchesToMatchCenterRows(liveResult.matches), url, page, pageSize);
+  if (liveResult.source === "football-api") return NextResponse.json({ ...liveResponse, source: "football-api" });
+
+  if (!supabase) return NextResponse.json({ ...liveResponse, source: "mock" });
 
   try {
     let query = supabase.from("matches").select("external_id,league,home_team,away_team,match_time,home_win,draw,away_win,ai_score", { count: "exact" }).order("match_time", { ascending: true });
@@ -56,6 +61,9 @@ export async function GET(request: Request) {
       const end = new Date(start);
       end.setUTCDate(end.getUTCDate() + 1);
       if (!Number.isNaN(start.getTime())) query = query.gte("match_time", start.toISOString()).lt("match_time", end.toISOString());
+    } else {
+      const window = getUpcomingDateWindow();
+      query = query.gte("match_time", window.start.toISOString());
     }
     if (league) query = query.eq("league", league);
     if (search) {
@@ -68,7 +76,7 @@ export async function GET(request: Request) {
     if (error) throw new Error(error.message);
 
     const rows = data ?? [];
-    if (!rows.length) return NextResponse.json(await getFootballApiFallback(url, page, pageSize));
+    if (!rows.length) return NextResponse.json({ ...liveResponse, source: "mock" });
 
     const total = count ?? rows.length;
     return NextResponse.json({ success: true, data: rows, total, page, pageSize, totalPages: Math.ceil(total / pageSize), source: "supabase" });
