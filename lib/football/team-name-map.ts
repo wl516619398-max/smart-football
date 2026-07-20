@@ -1,6 +1,6 @@
 const TEAM_NAME_MAP: Record<string, string> = {
   Arsenal: "阿森纳",
-  "Manchester United": "曼联",
+  "Manchester United": "曼彻斯特联",
   Liverpool: "利物浦",
   "Manchester City": "曼城",
   Chelsea: "切尔西",

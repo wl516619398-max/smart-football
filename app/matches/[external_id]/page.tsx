@@ -29,6 +29,7 @@ import { TeamComparison } from "@/components/match/TeamComparison";
 import { OddsValueCard } from "@/components/match/OddsValueCard";
 import { Disclaimer } from "@/components/common/Disclaimer";
 import { CopyAnalysisButton } from "@/components/common/CopyAnalysisButton";
+import { MatchResearchInsights } from "@/components/match/MatchResearchInsights";
 import { getTeamDisplayName } from "@/lib/football/team-name-map";
 
 export const metadata: Metadata = {
@@ -280,6 +281,13 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
           prediction={engineContext.prediction}
           oddsValue={oddsValue}
           analysis={expertAnalysis}
+        />
+        <MatchResearchInsights
+          homeTeam={homeTeam}
+          awayTeam={awayTeam}
+          homeStats={engineContext.homeTeamStats}
+          awayStats={engineContext.awayTeamStats}
+          prediction={engineContext.prediction}
         />
         <div className="flex justify-end"><CopyAnalysisButton content={analysisCopy} /></div>
       </div>
