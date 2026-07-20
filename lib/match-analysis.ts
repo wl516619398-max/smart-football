@@ -57,12 +57,14 @@ function summarize(items: RecentMatch[]): MatchRecentStats {
 }
 
 function fallbackRecent(team: "home" | "away", fallback: ReturnType<typeof getMatchById>) {
-  if (fallback) return fallback.recentForm[team].slice(0, 5);
+  return fallback?.recentForm[team].slice(0, 5) ?? [];
+  /*
   const scores = team === "home" ? ["2:1", "1:1", "2:0", "0:1", "1:0"] : ["1:1", "2:1", "1:2", "2:0", "0:0"];
   return scores.map((score, index) => {
     const [goalsFor, goalsAgainst] = score.split(":").map(Number);
     return { opponent: `近期对手 ${index + 1}`, score, result: goalsFor > goalsAgainst ? "win" : goalsFor < goalsAgainst ? "loss" : "draw", venue: team === "home" ? (index % 2 ? "away" : "home") : (index % 2 ? "home" : "away") } satisfies RecentMatch;
   });
+  */
 }
 
 function fallbackHeadToHead(fallback: ReturnType<typeof getMatchById>) {
@@ -157,13 +159,13 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
       getTeamRecentStats(teamIdForName(homeTeam, "33")),
       getTeamRecentStats(teamIdForName(awayTeam, "40")),
     ]);
-    homeApiForm = homeStats.recentMatches.slice(0, 5).map(toRecentMatch);
-    awayApiForm = awayStats.recentMatches.slice(0, 5).map(toRecentMatch);
+    if (homeStats.source === "api") homeApiForm = homeStats.recentMatches.slice(0, 5).map(toRecentMatch);
+    if (awayStats.source === "api") awayApiForm = awayStats.recentMatches.slice(0, 5).map(toRecentMatch);
   } catch {
     // Continue with database and local fallback data.
   }
-  const homeRecent = homeDatabaseForm.length ? homeDatabaseForm : homeApiForm.length ? homeApiForm : fallbackRecent("home", fallback);
-  const awayRecent = awayDatabaseForm.length ? awayDatabaseForm : awayApiForm.length ? awayApiForm : fallbackRecent("away", fallback);
+  const homeRecent = homeDatabaseForm.length ? homeDatabaseForm : homeApiForm.length ? homeApiForm : [];
+  const awayRecent = awayDatabaseForm.length ? awayDatabaseForm : awayApiForm.length ? awayApiForm : [];
   const recent = { home: summarize(homeRecent), away: summarize(awayRecent) };
 
   const databaseH2H = relatedRows.filter((row) => {
@@ -179,7 +181,7 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
       apiH2H = [];
     }
   }
-  const h2hMatches = databaseH2H.length ? databaseH2H : apiH2H.length ? apiH2H : fallbackHeadToHead(fallback);
+  const h2hMatches = databaseH2H.length ? databaseH2H : apiH2H;
   const h2hSummary = h2hMatches.reduce((summary, item) => {
     const [homeScore, awayScore] = item.score.split(":").map(Number);
     const homeWon = sameTeam(item.home, homeTeam) ? homeScore > awayScore : awayScore > homeScore;

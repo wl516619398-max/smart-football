@@ -4,6 +4,7 @@ import type { ApiFootballFixture, FootballRecentMatch } from "@/lib/football/typ
 
 export type TeamRecentStats = {
   team: string;
+  source: "api" | "fallback";
   recentMatches: FootballRecentMatch[];
   last10: {
     win: number;
@@ -98,6 +99,7 @@ async function getApiFootballRecentStats(teamId: string): Promise<TeamRecentStat
 
     return {
       team: parsed[0].teamName,
+      source: "api",
       recentMatches: parsed.map((item) => item.match),
       ...summarizeMatches(parsed.map((item) => item.match)),
     };
@@ -121,6 +123,7 @@ export async function getTeamRecentStats(teamId: string): Promise<TeamRecentStat
 
   return {
     team: team?.name ?? normalizedTeamId,
+    source: "fallback",
     recentMatches: form.matches.slice(0, 10),
     ...summary,
   };

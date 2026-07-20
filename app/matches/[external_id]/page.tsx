@@ -123,8 +123,8 @@ async function getEnginePrediction() {
     console.error("Failed to build team prediction:", error instanceof Error ? error.message : String(error));
     const homeTeamStats = toPredictionStats(50, 50, 50, 90);
     const awayTeamStats = toPredictionStats(50, 50, 50, 50);
-    const homeRating = { attackScore: 50, defenseScore: 50, formScore: 50, overallScore: 50 };
-    const awayRating = { attackScore: 50, defenseScore: 50, formScore: 50, overallScore: 50 };
+    const homeRating = { attackScore: 50, defenseScore: 50, formScore: 50, overallScore: 50, dataAvailable: false };
+    const awayRating = { attackScore: 50, defenseScore: 50, formScore: 50, overallScore: 50, dataAvailable: false };
     return {
       homeTeamStats,
       awayTeamStats,
@@ -263,7 +263,7 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
       </div>
 
       <div className="mt-6 space-y-6">
-        <PredictionEngineCard homeTeam={homeTeam} awayTeam={awayTeam} prediction={engineContext.prediction} />
+        <PredictionEngineCard homeTeam={homeTeam} awayTeam={awayTeam} prediction={engineContext.prediction} dataAvailable={engineContext.homeRating.dataAvailable && engineContext.awayRating.dataAvailable} />
         <div className="grid gap-6 lg:grid-cols-2">
           <ProbabilityChart prediction={engineContext.prediction} />
           <TeamComparison
