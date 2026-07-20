@@ -1,0 +1,9 @@
+import { ArrowRight, BookOpen, Clock3 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import type { HomeInsight } from "@/data/home";
+
+const toneStyles = { blue: "border-blue-500/20 bg-blue-500/5 text-blue-300", green: "border-emerald-500/20 bg-emerald-500/5 text-emerald-300", amber: "border-amber-500/20 bg-amber-500/5 text-amber-300" };
+
+export function LatestInsights({ insights }: { insights: HomeInsight[] }) {
+  return <section className="border-y border-slate-800/70 bg-[#0C1426]/70"><div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8"><div className="mb-5 flex items-end justify-between"><div><div className="flex items-center gap-2 text-xs font-medium text-amber-400"><BookOpen className="h-3.5 w-3.5" />ATHENA INSIGHTS</div><h2 className="mt-2 text-2xl font-semibold text-white">Athena 最新观点</h2><p className="mt-1 text-sm text-slate-500">基于 Mock 数据的赛事研究摘要，后续接入 AI 生成。</p></div><span className="hidden items-center gap-1 text-xs text-slate-500 sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-green-400" />持续更新</span></div><div className="grid gap-4 lg:grid-cols-3">{insights.map((insight) => <Card key={insight.title} className="border-slate-800/90 bg-[#111827]"><CardContent className="p-5"><div className="flex items-center justify-between gap-3"><span className={`rounded-full border px-2.5 py-1 text-[10px] font-medium ${toneStyles[insight.tone]}`}>{insight.category}</span><span className="flex items-center gap-1 text-[10px] text-slate-600"><Clock3 className="h-3 w-3" />{insight.time}</span></div><h3 className="mt-4 text-base font-semibold leading-6 text-white">{insight.title}</h3><p className="mt-2 text-sm leading-6 text-slate-400">{insight.summary}</p><div className="mt-4 flex items-center gap-1 text-xs text-blue-400">阅读数据观点 <ArrowRight className="h-3.5 w-3.5" /></div></CardContent></Card>)}</div></div></section>;
+}

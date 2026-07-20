@@ -5,10 +5,10 @@ import { Footer } from "@/components/footer";
 
 export const metadata: Metadata = {
   title: "Project Athena - AI足球比赛分析平台",
-  description: "AI足球赛事分析平台，提供比赛预测、比分分析、球员数据、xG分析以及体彩玩法参考。",
+  description: "足球数据分析与赛事信息平台，提供比赛概率模型、比分分析、球员数据、xG分析以及市场数据变化观察。",
   openGraph: {
     title: "Project Athena - AI足球比赛分析平台",
-    description: "AI足球赛事分析平台，提供比赛预测、比分分析、球员数据、xG分析以及体彩玩法参考。",
+    description: "足球数据分析与赛事信息平台，提供比赛概率模型、比分分析、球员数据、xG分析以及市场数据变化观察。",
     type: "website",
     siteName: "Project Athena",
     locale: "zh_CN",

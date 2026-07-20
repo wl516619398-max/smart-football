@@ -1,0 +1,3 @@
+export function LoadingCard({ className = "" }: { className?: string }) {
+  return <div className={`overflow-hidden rounded-xl border border-slate-800 bg-[#111827] p-5 ${className}`} aria-label="正在加载"><div className="h-3 w-24 animate-pulse rounded bg-slate-800" /><div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-4"><div className="h-5 animate-pulse rounded bg-slate-800" /><div className="h-3 w-8 animate-pulse rounded bg-slate-800" /><div className="h-5 animate-pulse rounded bg-slate-800" /></div><div className="mt-6 h-16 animate-pulse rounded-lg bg-slate-900" /><div className="mt-5 h-4 w-2/3 animate-pulse rounded bg-slate-800" /></div>;
+}

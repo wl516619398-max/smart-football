@@ -1,8 +1,9 @@
-export type Membership = "free" | "vip";
+export type Membership = "free" | "vip" | "enterprise";
 
 export type AthenaUser = {
   id: string;
   name: string;
+  email: string;
   avatar: string;
   membership: Membership;
 };
@@ -15,6 +16,7 @@ export const FAVORITES_CHANGED_EVENT = "athena:favorites-changed";
 
 const defaultUser: AthenaUser = {
   id: "user001",
+  email: "demo@project-athena.local",
   name: "Athena用户",
   avatar: "",
   membership: "free",
@@ -24,6 +26,15 @@ function notify(eventName: string) {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(eventName));
 }
 
+function syncUserToDatabase(user: AthenaUser) {
+  if (typeof window === "undefined") return;
+  void fetch("/api/users/sync", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: user.id, email: user.email, membershipLevel: user.membership, vipStatus: user.membership !== "free" }),
+  }).catch(() => undefined);
+}
+
 export function getUser(): AthenaUser | null {
   if (typeof window === "undefined") return null;
   try {
@@ -31,17 +42,20 @@ export function getUser(): AthenaUser | null {
     if (!stored) return null;
     const parsed = JSON.parse(stored) as Partial<AthenaUser>;
     if (!parsed.id || !parsed.name) return null;
-    return { ...defaultUser, ...parsed, membership: parsed.membership === "vip" ? "vip" : "free" };
+    const membership = parsed.membership === "vip" || parsed.membership === "enterprise" ? parsed.membership : "free";
+    return { ...defaultUser, ...parsed, membership };
   } catch {
     return null;
   }
 }
 
-export function login(name = defaultUser.name): AthenaUser {
-  const user = { ...defaultUser, name: name.trim() || defaultUser.name };
+export function login(name = defaultUser.name, email = "", id = ""): AthenaUser {
+  const existing = getUser();
+  const user = { ...defaultUser, ...existing, id: id || existing?.id || defaultUser.id, name: name.trim() || defaultUser.name, email: email.trim() || existing?.email || defaultUser.email };
   if (typeof window !== "undefined") {
     window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
     notify(USER_CHANGED_EVENT);
+    syncUserToDatabase(user);
   }
   return user;
 }
@@ -53,13 +67,22 @@ export function logout() {
   }
 }
 
-export function upgradeVip(): AthenaUser {
-  const user = { ...(getUser() ?? defaultUser), membership: "vip" as const };
+export function setMembership(membership: Membership): AthenaUser {
+  const user = { ...(getUser() ?? defaultUser), membership };
   if (typeof window !== "undefined") {
     window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
     notify(USER_CHANGED_EVENT);
+    syncUserToDatabase(user);
   }
   return user;
+}
+
+export function upgradeVip(): AthenaUser {
+  return setMembership("vip");
+}
+
+export function upgradeEnterprise(): AthenaUser {
+  return setMembership("enterprise");
 }
 
 export function getStoredIds(key: typeof FAVORITES_STORAGE_KEY | typeof RECENT_MATCHES_STORAGE_KEY): string[] {

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/user/UserMenu";
 import { cn } from "@/lib/utils";
 
-const navItems = [{ href: "/", label: "首页" }, { href: "/matches", label: "比赛" }, { href: "/ai", label: "AI 推荐", icon: Zap }, { href: "/leagues", label: "联赛" }, { href: "/players", label: "球员" }, { href: "/vip", label: "VIP会员" }];
+const navItems = [{ href: "/", label: "首页" }, { href: "/matches", label: "比赛" }, { href: "/recommend", label: "AI分析", icon: Zap }, { href: "/leagues", label: "联赛" }, { href: "/players", label: "球员" }, { href: "/vip", label: "VIP会员" }];
 
 export function Header() {
   const pathname = usePathname();

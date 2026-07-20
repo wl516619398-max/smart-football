@@ -216,8 +216,13 @@ const baseMatchDetails: MatchDetailData[] = [
       { home: "\u66fc\u8054", away: "\u5229\u7269\u6d66", score: "0:2", date: "2025-05-18" },
       { home: "\u5229\u7269\u6d66", away: "\u66fc\u8054", score: "2:2", date: "2025-01-05" },
       { home: "\u66fc\u8054", away: "\u5229\u7269\u6d66", score: "1:0", date: "2024-09-01" },
+      { home: "\u5229\u7269\u6d66", away: "\u66fc\u8054", score: "0:1", date: "2024-04-07" },
+      { home: "\u66fc\u8054", away: "\u5229\u7269\u6d66", score: "2:2", date: "2023-12-17" },
+      { home: "\u5229\u7269\u6d66", away: "\u66fc\u8054", score: "1:0", date: "2023-03-05" },
+      { home: "\u66fc\u8054", away: "\u5229\u7269\u6d66", score: "1:2", date: "2022-08-22" },
+      { home: "\u5229\u7269\u6d66", away: "\u66fc\u8054", score: "0:0", date: "2022-04-19" },
     ],
-    headToHeadSummary: { homeWins: 2, draws: 2, awayWins: 1, averageGoals: 2.4, bothScored: 60 },
+    headToHeadSummary: { homeWins: 3, draws: 4, awayWins: 3, averageGoals: 2.1, bothScored: 50 },
     risks: [
       { title: "\u5f3a\u5f3a\u5bf9\u8bdd\u8bef\u5dee", description: "\u5f3a\u5f3a\u5bf9\u8bdd\u7684\u6bd4\u8d5b\u73af\u5883\u53d8\u91cf\u66f4\u591a\uff0c\u6a21\u578b\u8bef\u5dee\u901a\u5e38\u9ad8\u4e8e\u666e\u901a\u6bd4\u8d5b\u3002" },
       { title: "\u53cd\u51fb\u8282\u594f", description: "\u5229\u7269\u6d66\u5728\u5feb\u901f\u53cd\u51fb\u4e2d\u7684\u7206\u53d1\u529b\u53ef\u80fd\u6539\u53d8\u6bd4\u8d5b\u8d70\u52bf\u3002" },
@@ -339,7 +344,7 @@ function createSupplementalMatch(config: {
       { title: "综合判断", content: "模型输出仅作为赛前信息整理和数据分析参考，不构成确定性结论。" },
     ],
     teamStats: [
-      { label: "近 5 场胜率", home: 60, away: 48, unit: "%", higherIsBetter: true },
+      { label: "近 5 场模型估算概率", home: 60, away: 48, unit: "%", higherIsBetter: true },
       { label: "场均进球", home: 1.9, away: 1.6, higherIsBetter: true },
       { label: "场均 xG", home: 1.75, away: 1.55, higherIsBetter: true },
       { label: "控球率", home: 54, away: 52, unit: "%", higherIsBetter: true },
@@ -525,20 +530,20 @@ const commercialOverrides: Record<string, CommercialMatchData> = {
       confidence: generatedPredictions.get("manchester-united-vs-liverpool")?.confidence ?? 0,
     },
     teams: {
-      home: { name: "曼联", shortName: "MUN", color: "#DA291C", form: ["W", "W", "D", "L", "W"], goalsFor: 12, goalsAgainst: 6, venueWinRate: 72, venueLabel: "主场胜率" },
-      away: { name: "利物浦", shortName: "LIV", color: "#C8102E", form: ["W", "W", "W", "D", "W"], goalsFor: 15, goalsAgainst: 5, venueWinRate: 68, venueLabel: "客场胜率" },
+      home: { name: "曼联", shortName: "MUN", color: "#DA291C", form: ["W", "W", "D", "L", "W"], goalsFor: 12, goalsAgainst: 6, venueWinRate: 72, venueLabel: "主场模型概率" },
+      away: { name: "利物浦", shortName: "LIV", color: "#C8102E", form: ["W", "W", "W", "D", "W"], goalsFor: 15, goalsAgainst: 5, venueWinRate: 68, venueLabel: "客场模型概率" },
     },
     players: [
       { name: "Bruno Fernandes", team: "曼联", avatar: "BF", rating: 8.1, goals: 2, assists: 3 },
       { name: "Mohamed Salah", team: "利物浦", avatar: "MS", rating: 8.4, goals: 4, assists: 2 },
     ],
-    odds: { market: "亚洲盘口", initial: "曼联 -0.25", current: "曼联 -0.5", trend: "主队支持增强" },
+    odds: { market: "亚洲市场数据", initial: "曼联 -0.25", current: "曼联 -0.5", trend: "主队关注度增强" },
     report: {
       summary: "根据球队近期表现、进攻效率、防守稳定性、主客场因素综合分析，曼联在比赛主动权与主场环境上略占优势。",
       lean: "主胜略占优势",
       risk: "利物浦反击能力较强。",
     },
-    vipFeatures: ["精准比分模型", "欧赔变化分析", "最近100场历史数据", "AI资金流判断"],
+    vipFeatures: ["精细比分模型", "市场数据变化分析", "最近100场历史数据", "AI市场关注度判断"],
   },
 };
 
@@ -563,16 +568,16 @@ export function getCommercialMatchBySlug(slug: string): { match: MatchDetailData
       confidence: match.prediction.confidence,
     },
     teams: {
-      home: { name: match.home.name, shortName: match.home.shortName, color: match.home.color, form: ["W", "D", "W", "L", "W"], goalsFor: 10, goalsAgainst: 7, venueWinRate: 64, venueLabel: "主场胜率" },
-      away: { name: match.away.name, shortName: match.away.shortName, color: match.away.color, form: ["W", "W", "D", "W", "L"], goalsFor: 13, goalsAgainst: 8, venueWinRate: 61, venueLabel: "客场胜率" },
+      home: { name: match.home.name, shortName: match.home.shortName, color: match.home.color, form: ["W", "D", "W", "L", "W"], goalsFor: 10, goalsAgainst: 7, venueWinRate: 64, venueLabel: "主场模型概率" },
+      away: { name: match.away.name, shortName: match.away.shortName, color: match.away.color, form: ["W", "W", "D", "W", "L"], goalsFor: 13, goalsAgainst: 8, venueWinRate: 61, venueLabel: "客场模型概率" },
     },
     players: [
       { name: "关键球员 A", team: match.home.name, avatar: "A", rating: 8.0, goals: 3, assists: 2 },
       { name: "关键球员 B", team: match.away.name, avatar: "B", rating: 7.9, goals: 3, assists: 2 },
     ],
-    odds: { market: "亚洲盘口", initial: match.home.name + " -0.25", current: match.home.name + " -0.5", trend: "主队支持增强" },
+    odds: { market: "亚洲市场数据", initial: match.home.name + " -0.25", current: match.home.name + " -0.5", trend: "主队关注度增强" },
     report: { summary: match.prediction.summary, lean: match.prediction.firstChoice, risk: "临场阵容和比赛节奏可能带来额外波动。" },
-    vipFeatures: ["精准比分模型", "欧赔变化分析", "最近100场历史数据", "AI资金流判断"],
+    vipFeatures: ["精细比分模型", "市场数据变化分析", "最近100场历史数据", "AI市场关注度判断"],
   };
   return { match, commercial };
 }

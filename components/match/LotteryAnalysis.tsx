@@ -4,12 +4,12 @@ import type { LotteryRecommendation, MatchDetailData } from "@/types/match";
 import { SectionHeader } from "@/components/match/SectionHeader";
 
 const copy = {
-  title: "\u4e2d\u56fd\u4f53\u5f69\u73a9\u6cd5\u5206\u6790",
-  description: "\u6839\u636e\u7403\u961f\u72b6\u6001\u3001xG\u3001\u9635\u5bb9\u4e0e\u5386\u53f2\u6570\u636e\u751f\u6210\uff0c\u4ec5\u4f9b\u5206\u6790\u53c2\u8003\u3002",
-  recommend: "\u63a8\u8350",
-  alternative: "\u5907\u9009",
-  confidence: "\u4fe1\u5fc3",
-  reference: "\u4ec5\u4f9b\u6570\u636e\u5206\u6790\u53c2\u8003",
+  title: "\u591a\u7ef4\u8d5b\u4e8b\u6570\u636e\u89c2\u5bdf",
+  description: "\u6839\u636e\u7403\u961f\u72b6\u6001\u3001xG\u3001\u9635\u5bb9\u4e0e\u5386\u53f2\u6570\u636e\u751f\u6210\uff0c\u4ec5\u4f9b\u8d5b\u4e8b\u7814\u7a76\u53c2\u8003\u3002",
+  recommend: "\u6a21\u578b\u89c2\u70b9",
+  alternative: "\u5173\u6ce8\u65b9\u5411",
+  confidence: "\u6a21\u578b\u4e00\u81f4\u6027",
+  reference: "\u4ec5\u4f9b\u8d5b\u4e8b\u7814\u7a76\u53c2\u8003",
 };
 
 function Rating({ value }: { value: number }) {

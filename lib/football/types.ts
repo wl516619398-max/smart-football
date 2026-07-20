@@ -17,6 +17,29 @@ export type FootballRecentMatch = {
   goalsFor: number;
   goalsAgainst: number;
   venue: "home" | "away";
+  matchId?: string;
+  opponent?: string;
+  date?: string;
+  score?: string;
+};
+
+export type FootballTeamForm = {
+  teamId: string;
+  matches: FootballRecentMatch[];
+};
+
+export type FootballStanding = {
+  teamId: string;
+  teamName: string;
+  league: string;
+  rank: number;
+  played: number;
+  points: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
 };
 
 export type FootballTeamStats = {
@@ -52,6 +75,7 @@ export type FootballMatch = {
   homeTeam: FootballTeam;
   awayTeam: FootballTeam;
   date: string;
+  status?: string;
   venue: string;
   odds: FootballOdds;
   stats: FootballMatchStats;

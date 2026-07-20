@@ -1,1 +1,1 @@
-export { isFootballApiConfigured, requestFootballApi as footballApiRequest } from "@/lib/football/api-client";
+export { isFootballApiConfigured, requestFootballApi as footballApiRequest, requestFootballApiRaw as footballApiRawRequest } from "@/lib/football/api-client";

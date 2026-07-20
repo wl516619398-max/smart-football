@@ -1,4 +1,5 @@
 export type MatchTeam = {
+  id?: string;
   name: string;
   englishName: string;
   shortName: string;
@@ -162,6 +163,43 @@ export type HeadToHeadMatch = {
   away: string;
   score: string;
   date: string;
+};
+
+export type MatchRecentStats = {
+  matches: RecentMatch[];
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+};
+
+export type MatchMetric = {
+  label: string;
+  home: number;
+  away: number;
+};
+
+export type MatchFocusFactor = {
+  label: string;
+  value: string;
+  tone: "blue" | "green" | "amber" | "violet";
+};
+
+export type MatchAnalysisData = {
+  recent: {
+    home: MatchRecentStats;
+    away: MatchRecentStats;
+  };
+  headToHead: {
+    matches: HeadToHeadMatch[];
+    homeWins: number;
+    draws: number;
+    awayWins: number;
+    latestScore: string;
+  };
+  metrics: MatchMetric[];
+  focusFactors: MatchFocusFactor[];
 };
 
 export type RiskItem = {

@@ -1,0 +1,12 @@
+[
+  { "match_id": "manchester-united-vs-liverpool", "home_team": "曼联", "away_team": "利物浦", "prediction": "主队模型观点占优", "confidence": 82, "odds_value": 0.064, "final_result": "hit", "created_at": "2026-07-19T09:00:00.000Z" },
+  { "match_id": "real-madrid-vs-barcelona", "home_team": "皇家马德里", "away_team": "巴塞罗那", "prediction": "主队模型观点占优", "confidence": 76, "odds_value": 0.031, "final_result": "hit", "created_at": "2026-07-18T16:30:00.000Z" },
+  { "match_id": "bayern-munich-vs-borussia-dortmund", "home_team": "拜仁慕尼黑", "away_team": "多特蒙德", "prediction": "主队模型观点占优", "confidence": 84, "odds_value": 0.082, "final_result": "hit", "created_at": "2026-07-18T12:10:00.000Z" },
+  { "match_id": "arsenal-vs-chelsea", "home_team": "阿森纳", "away_team": "切尔西", "prediction": "主队模型观点占优", "confidence": 79, "odds_value": 0.018, "final_result": "hit", "created_at": "2026-07-17T20:00:00.000Z" },
+  { "match_id": "inter-milan-vs-juventus", "home_team": "国际米兰", "away_team": "尤文图斯", "prediction": "主队模型观点占优", "confidence": 73, "odds_value": -0.012, "final_result": "miss", "created_at": "2026-07-17T13:00:00.000Z" },
+  { "match_id": "psg-vs-marseille", "home_team": "巴黎圣日耳曼", "away_team": "马赛", "prediction": "主队模型观点占优", "confidence": 86, "odds_value": 0.077, "final_result": "hit", "created_at": "2026-07-16T19:20:00.000Z" },
+  { "match_id": "ac-milan-vs-napoli", "home_team": "AC米兰", "away_team": "那不勒斯", "prediction": "双方数据接近", "confidence": 64, "odds_value": -0.026, "final_result": "miss", "created_at": "2026-07-16T11:40:00.000Z" },
+  { "match_id": "man-city-vs-tottenham", "home_team": "曼城", "away_team": "托特纳姆热刺", "prediction": "主队模型观点占优", "confidence": 88, "odds_value": 0.091, "final_result": "hit", "created_at": "2026-07-15T18:00:00.000Z" },
+  { "match_id": "atletico-madrid-vs-sevilla", "home_team": "马德里竞技", "away_team": "塞维利亚", "prediction": "主队模型观点占优", "confidence": 75, "odds_value": 0.022, "final_result": "hit", "created_at": "2026-07-15T10:15:00.000Z" },
+  { "match_id": "dortmund-vs-leipzig", "home_team": "多特蒙德", "away_team": "莱比锡", "prediction": "双方数据接近", "confidence": 61, "odds_value": -0.041, "final_result": "miss", "created_at": "2026-07-14T17:30:00.000Z" }
+]

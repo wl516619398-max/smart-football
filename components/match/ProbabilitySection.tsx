@@ -3,9 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { MatchDetailData } from "@/types/match";
 
 const copy = {
-  title: "\u80dc\u5e73\u8d1f\u6982\u7387",
+  title: "\u80dc\u5e73\u8d1f\u6a21\u578b\u4f30\u7b97\u6982\u7387",
   description: "Athena \u6a21\u578b\u4e0e\u5e02\u573a\u53c2\u8003\u7684\u6982\u7387\u89c6\u56fe",
-  model: "\u6a21\u578b\u4e3b\u80dc",
+  model: "\u6a21\u578b\u4f30\u7b97\u4e3b\u80dc",
   reference: "\u53c2\u8003\u9690\u542b\u6982\u7387",
   difference: "\u6982\u7387\u5dee",
   hint: "\u5f53\u524d\u6982\u7387\u5408\u8ba1",

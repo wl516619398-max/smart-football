@@ -11,12 +11,12 @@ const copy = {
   vipTitle: "\u89e3\u9501\u66f4\u591a\u5206\u6790",
   vipText: "\u83b7\u53d6\u9996\u53d1\u540e\u66f4\u65b0\u3001\u591a\u6a21\u578b\u5bf9\u6bd4\u4e0e\u66f4\u5b8c\u6574\u7684\u7403\u5458\u5f71\u54cd\u8bc4\u4f30\u3002",
   vipButton: "\u67e5\u770b\u4f1a\u5458\u6743\u76ca",
-  confidence: "\u7f6e\u4fe1\u5ea6",
+  confidence: "\u6a21\u578b\u4e00\u81f4\u6027",
 };
 
 const navItems = [
   { id: "ai-conclusion", label: "AI\u7ed3\u8bba" },
-  { id: "lottery-analysis", label: "\u4f53\u5f69\u5206\u6790" },
+  { id: "lottery-analysis", label: "\u8d5b\u4e8b\u6570\u636e\u89c2\u5bdf" },
   { id: "score-prediction", label: "\u6bd4\u5206\u9884\u6d4b" },
   { id: "players", label: "\u7403\u5458\u5206\u6790" },
   { id: "ai-analysis", label: "\u6df1\u5ea6\u5206\u6790" },
