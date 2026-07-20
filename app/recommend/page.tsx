@@ -10,6 +10,7 @@ import { predictScores } from "@/lib/ai/score-model";
 import { detectUpset } from "@/lib/ai/upset-engine";
 import type { FootballMatch } from "@/lib/football/types";
 import type { FeaturedMatch, MatchRisk, MatchTeam } from "@/types/match";
+import { getTeamDisplayName } from "@/lib/football/team-name-map";
 
 export const metadata: Metadata = {
   title: "Athena AI 赛事分析 | Project Athena",
@@ -18,7 +19,8 @@ export const metadata: Metadata = {
 
 function toTeam(team: FootballMatch["homeTeam"], index: number): MatchTeam {
   const colors = ["#2563EB", "#22C55E", "#A855F7", "#F59E0B"];
-  return { name: team.name, englishName: team.name, shortName: team.shortName || team.name.slice(0, 3).toUpperCase(), color: colors[index % colors.length], secondaryColor: colors[(index + 1) % colors.length] };
+  const displayName = getTeamDisplayName(team.name);
+  return { name: displayName, englishName: team.name, shortName: team.shortName || displayName.slice(0, 3).toUpperCase(), color: colors[index % colors.length], secondaryColor: colors[(index + 1) % colors.length] };
 }
 
 function toRecommendation(match: FootballMatch, index: number): FeaturedMatch {

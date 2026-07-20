@@ -29,6 +29,7 @@ import { TeamComparison } from "@/components/match/TeamComparison";
 import { OddsValueCard } from "@/components/match/OddsValueCard";
 import { Disclaimer } from "@/components/common/Disclaimer";
 import { CopyAnalysisButton } from "@/components/common/CopyAnalysisButton";
+import { getTeamDisplayName } from "@/lib/football/team-name-map";
 
 export const metadata: Metadata = {
   title: "比赛详情 | Project Athena",
@@ -61,12 +62,14 @@ async function getMatchByExternalId(externalId: string): Promise<MatchRow | null
       .eq("external_id", externalId)
       .maybeSingle();
 
-    if (!error && data) return data as MatchRow;
+    if (!error && data) return { ...(data as MatchRow), home_team: getTeamDisplayName((data as MatchRow).home_team), away_team: getTeamDisplayName((data as MatchRow).away_team) };
     if (error) console.error("Failed to load match detail, using football API fallback:", error);
   }
 
   const fixture = await getFixtureDetail(externalId);
-  return fixture ? footballMatchToMatchCenterRow(fixture) as MatchRow : null;
+  if (!fixture) return null;
+  const row = footballMatchToMatchCenterRow(fixture) as MatchRow;
+  return { ...row, home_team: getTeamDisplayName(row.home_team), away_team: getTeamDisplayName(row.away_team) };
 }
 
 function formatMatchTime(value: string | null) {

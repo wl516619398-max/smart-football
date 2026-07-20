@@ -2,6 +2,8 @@ import Link from "next/link";
 import { ChevronRight, CircleDot } from "lucide-react";
 import { HeroAI } from "@/components/home/HeroAI";
 import { MatchCard } from "@/components/home/MatchCard";
+import { formatMatchDateTime } from "@/lib/football/date-format";
+import { getTeamDisplayName } from "@/lib/football/team-name-map";
 import type { FeaturedMatch as FeaturedMatchData, MatchRisk, MatchTeam } from "@/types/match";
 
 export type SyncedHomeMatch = {
@@ -46,15 +48,15 @@ type HomeMatchData = {
 const teamColors = ["#2563EB", "#22C55E", "#A855F7", "#F59E0B"];
 
 function toTeam(name: string, index: number, id?: string | null): MatchTeam {
-  return { id: id ?? undefined, name, englishName: name, shortName: name.slice(0, 3).toUpperCase(), color: teamColors[index % teamColors.length], secondaryColor: teamColors[(index + 1) % teamColors.length] };
+  const displayName = getTeamDisplayName(name);
+  return { id: id ?? undefined, name: displayName, englishName: name, shortName: displayName.slice(0, 3).toUpperCase(), color: teamColors[index % teamColors.length], secondaryColor: teamColors[(index + 1) % teamColors.length] };
 }
 
 function toHomeMatchData(match: SyncedHomeMatch, index: number): HomeMatchData {
-  const date = new Date(match.match_time);
-  const validDate = !Number.isNaN(date.getTime());
+  const formattedDate = formatMatchDateTime(match.match_time);
   const homeProbability = match.home_win ?? 40;
   const drawProbability = match.draw ?? 27;
-  const awayProbability = match.away_win ?? 100 - homeProbability - drawProbability;
+  const awayProbability = match.away_win ?? Math.max(0, 100 - homeProbability - drawProbability);
   const recommendation = match.ai_pick || (homeProbability >= awayProbability ? "主胜" : "客胜");
   const risk = (match.risk_level || (Math.max(homeProbability, awayProbability) >= 47 ? "低" : "中")) as MatchRisk;
   const scorePrediction = recommendation === "客胜" ? "1:2" : recommendation === "平局" ? "1:1" : "2:1";
@@ -64,8 +66,8 @@ function toHomeMatchData(match: SyncedHomeMatch, index: number): HomeMatchData {
     homeTeam: toTeam(match.home_team, index, match.home_team_id),
     awayTeam: toTeam(match.away_team, index + 1, match.away_team_id),
     league: match.league,
-    date: validDate ? date.toISOString().slice(0, 10) : match.match_time.slice(0, 10),
-    time: validDate ? date.toISOString().slice(11, 16) : "待定",
+    date: formattedDate.date,
+    time: formattedDate.time,
     scorePrediction,
     homeProbability,
     drawProbability,

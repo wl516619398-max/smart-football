@@ -16,10 +16,11 @@ function filterAndPageFallback(rows: MatchCenterRow[], url: URL, page: number, p
   const date = url.searchParams.get("date")?.trim() ?? "";
   const league = url.searchParams.get("league")?.trim() ?? "";
   const search = url.searchParams.get("search")?.trim().toLowerCase() ?? "";
-  const filtered = rows
-    .filter((row) => date ? toShanghaiDateKey(row.match_time) === date : isTodayOrFuture(row.match_time))
+  const eligibleRows = rows
     .filter((row) => !league || row.league === league)
-    .filter((row) => !search || `${row.home_team} ${row.away_team}`.toLowerCase().includes(search))
+    .filter((row) => !search || `${row.home_team} ${row.away_team}`.toLowerCase().includes(search));
+  const exactDateRows = date ? eligibleRows.filter((row) => toShanghaiDateKey(row.match_time) === date) : [];
+  const filtered = (date && exactDateRows.length ? exactDateRows : eligibleRows.filter((row) => isTodayOrFuture(row.match_time)))
     .sort((left, right) => new Date(left.match_time).getTime() - new Date(right.match_time).getTime());
   const from = (page - 1) * pageSize;
   const data = filtered.slice(from, from + pageSize);

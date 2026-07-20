@@ -4,7 +4,9 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, Filter, Search } from "lucide-react";
 import { MatchCard } from "@/components/match-card";
 import { Button } from "@/components/ui/button";
+import { formatMatchDateTime } from "@/lib/football/date-format";
 import { getUpcomingDateWindow } from "@/lib/football/date-window";
+import { getTeamDisplayName } from "@/lib/football/team-name-map";
 import type { MatchCenterRow } from "@/lib/football/match-center";
 import type { FeaturedMatch, MatchRisk, MatchTeam } from "@/types/match";
 
@@ -19,7 +21,7 @@ export type MatchesResponse = {
   totalPages: number;
 };
 
-const leagueOptions = ["Premier League", "La Liga", "Bundesliga", "Serie A", "Ligue 1", "UEFA Champions League", "英格兰超级联赛", "西甲", "德甲"];
+const leagueOptions = ["Premier League", "La Liga", "Bundesliga", "Serie A", "Ligue 1", "UEFA Champions League"];
 const colors = ["#2563EB", "#22C55E", "#A855F7", "#F59E0B"];
 
 function shortName(name: string) {
@@ -27,20 +29,21 @@ function shortName(name: string) {
 }
 
 function toFeaturedMatch(match: SyncedMatch, index: number): FeaturedMatch {
-  const date = new Date(match.match_time);
-  const validDate = !Number.isNaN(date.getTime());
+  const formattedDate = formatMatchDateTime(match.match_time);
   const homeWin = match.home_win ?? 40 + (index % 5) * 3;
   const draw = match.draw ?? 27;
   const awayWin = match.away_win ?? Math.max(0, 100 - homeWin - draw);
-  const homeTeam: MatchTeam = { name: match.home_team, englishName: match.home_team, shortName: shortName(match.home_team), color: colors[index % colors.length], secondaryColor: colors[(index + 1) % colors.length] };
-  const awayTeam: MatchTeam = { name: match.away_team, englishName: match.away_team, shortName: shortName(match.away_team), color: colors[(index + 2) % colors.length], secondaryColor: colors[(index + 3) % colors.length] };
+  const homeTeamName = getTeamDisplayName(match.home_team);
+  const awayTeamName = getTeamDisplayName(match.away_team);
+  const homeTeam: MatchTeam = { name: homeTeamName, englishName: match.home_team, shortName: shortName(homeTeamName), color: colors[index % colors.length], secondaryColor: colors[(index + 1) % colors.length] };
+  const awayTeam: MatchTeam = { name: awayTeamName, englishName: match.away_team, shortName: shortName(awayTeamName), color: colors[(index + 2) % colors.length], secondaryColor: colors[(index + 3) % colors.length] };
   const risk = (match.risk_level || (homeWin >= 47 ? "低" : homeWin <= 41 ? "高" : "中")) as MatchRisk;
 
   return {
     id: match.external_id,
     league: match.league,
-    date: validDate ? date.toISOString().slice(0, 10) : match.match_time.slice(0, 10),
-    time: validDate ? date.toISOString().slice(11, 16) : "待定",
+    date: formattedDate.date,
+    time: formattedDate.time,
     homeTeam,
     awayTeam,
     aiScore: match.ai_score ?? Math.max(homeWin, awayWin) + 20,
@@ -54,7 +57,8 @@ function toFeaturedMatch(match: SyncedMatch, index: number): FeaturedMatch {
 }
 
 export function MatchesBrowser({ initialResult }: { initialResult: MatchesResponse }) {
-  const [date, setDate] = useState("");
+  const dateWindow = getUpcomingDateWindow();
+  const [date, setDate] = useState(dateWindow.startKey);
   const [league, setLeague] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -63,10 +67,9 @@ export function MatchesBrowser({ initialResult }: { initialResult: MatchesRespon
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const skipInitialRequest = useRef(initialResult.data.length > 0);
-  const dateWindow = getUpcomingDateWindow();
 
   useEffect(() => {
-    if (skipInitialRequest.current && page === 1 && !date && !league && !search) {
+    if (skipInitialRequest.current && page === 1 && date === dateWindow.startKey && !league && !search) {
       skipInitialRequest.current = false;
       return;
     }
@@ -83,7 +86,6 @@ export function MatchesBrowser({ initialResult }: { initialResult: MatchesRespon
       .then(async (response) => {
         const payload = (await response.json()) as Partial<MatchesResponse> & { items?: unknown; matches?: unknown };
         if (!response.ok || payload.success !== true) throw new Error("比赛数据暂时无法加载");
-
         const rows = Array.isArray(payload.data) ? payload.data : Array.isArray(payload.items) ? payload.items : Array.isArray(payload.matches) ? payload.matches : [];
         const total = typeof payload.total === "number" ? payload.total : rows.length;
         const currentPage = typeof payload.page === "number" ? payload.page : page;
@@ -95,7 +97,7 @@ export function MatchesBrowser({ initialResult }: { initialResult: MatchesRespon
       .finally(() => setLoading(false));
 
     return () => controller.abort();
-  }, [date, league, page, search]);
+  }, [date, dateWindow.startKey, league, page, search]);
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -104,7 +106,7 @@ export function MatchesBrowser({ initialResult }: { initialResult: MatchesRespon
   }
 
   function clearFilters() {
-    setDate("");
+    setDate(dateWindow.startKey);
     setLeague("");
     setSearchInput("");
     setSearch("");
