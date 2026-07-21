@@ -94,7 +94,14 @@ function recentFromRow(row: DatabaseMatchRow, team: string, teamId?: string): Re
 }
 
 function summarize(items: RecentMatch[]): MatchRecentStats {
-  return items.reduce<MatchRecentStats>((summary, item) => {
+  const matches = items.slice(0, 5).map((item) => ({
+    opponent: item.opponent,
+    score: item.score.replace("-", ":"),
+    result: item.result,
+    venue: item.venue,
+  } satisfies RecentMatch));
+
+  return matches.reduce<MatchRecentStats>((summary, item) => {
     const [goalsFor, goalsAgainst] = item.score.split(":").map(Number);
     summary.matches.push(item);
     summary.wins += item.result === "win" ? 1 : 0;
