@@ -3,6 +3,8 @@ import type { FootballMatch } from "@/lib/football/types";
 
 export type MatchCenterRow = {
   external_id: string;
+  home_team_id?: string | null;
+  away_team_id?: string | null;
   league: string;
   home_team: string;
   away_team: string;
@@ -22,6 +24,8 @@ export function footballMatchToMatchCenterRow(match: FootballMatch): MatchCenter
 
   return {
     external_id: match.id,
+    home_team_id: match.homeTeam.id,
+    away_team_id: match.awayTeam.id,
     league: match.league,
     home_team: match.homeTeam.name,
     away_team: match.awayTeam.name,

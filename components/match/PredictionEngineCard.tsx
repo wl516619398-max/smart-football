@@ -41,8 +41,8 @@ export function PredictionEngineCard({ homeTeam, awayTeam, prediction, dataAvail
             {dataAvailable ? <><p className="mt-2 text-3xl font-bold text-white">{Math.round(prediction.expectedGoals.home)}-{Math.round(prediction.expectedGoals.away)}</p><p className="mt-1 text-xs text-slate-500">预计进球 {prediction.expectedGoals.home.toFixed(2)} : {prediction.expectedGoals.away.toFixed(2)}</p></> : <p className="mt-3 text-sm text-slate-500">数据同步中</p>}
           </div>
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-            <p className="text-xs text-slate-500">模型一致性</p>
-            {dataAvailable ? <><p className="mt-2 text-3xl font-bold text-emerald-300">{prediction.confidence}%</p><p className="mt-1 text-xs text-slate-500">基于当前球队数据计算</p></> : <p className="mt-3 text-sm text-slate-500">暂无完整数据</p>}
+            <p className="text-xs text-slate-500">AI判断可信度</p>
+            {dataAvailable ? <><p className="mt-2 text-3xl font-bold text-emerald-300">{prediction.confidence}%</p><p className="mt-1 text-xs text-slate-500">AI根据球队实力、近期表现、攻防数据综合计算，数据越完整，判断越可靠。</p></> : <p className="mt-3 text-sm text-slate-500">数据同步中</p>}
           </div>
         </div>
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="flex items-center gap-2 text-xs text-amber-200"><Sparkles className="h-4 w-4" />AI模型倾向</p><div className="mt-3 flex flex-wrap gap-2">{prediction.recommendation.map((item) => <span key={item} className="rounded-full border border-amber-400/20 bg-amber-400/5 px-3 py-1.5 text-xs text-slate-200">{item}</span>)}</div></div>

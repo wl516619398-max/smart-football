@@ -1,8 +1,8 @@
 import { getMatchById } from "@/data/matches";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { HeadToHeadMatch, MatchAnalysisData, MatchFocusFactor, MatchMetric, MatchRecentStats, MatchTeam, RecentMatch } from "@/types/match";
-import { getTeamHeadToHeadMatches, getTeamRecentStats } from "@/lib/football/stats";
 import { getTeamDisplayName } from "@/lib/football/team-name-map";
+import { getHistoricalHeadToHead, getHistoricalTeamMatches, resolveFootballTeamId } from "@/lib/football/history";
 
 type DatabaseMatchRow = Record<string, unknown>;
 
@@ -12,12 +12,42 @@ function text(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
+const TEAM_IDENTITIES: Record<string, string> = {
+  "manchester united": "manchester united",
+  "曼联": "manchester united",
+  "曼彻斯特联": "manchester united",
+  liverpool: "liverpool",
+  "利物浦": "liverpool",
+  "manchester city": "manchester city",
+  "曼城": "manchester city",
+  arsenal: "arsenal",
+  "阿森纳": "arsenal",
+  chelsea: "chelsea",
+  "切尔西": "chelsea",
+  "real madrid": "real madrid",
+  "皇家马德里": "real madrid",
+  barcelona: "barcelona",
+  "巴塞罗那": "barcelona",
+  "巴萨": "barcelona",
+  "bayern munich": "bayern munich",
+  "拜仁慕尼黑": "bayern munich",
+};
+
 function sameTeam(left: string, right: string) {
-  return getTeamDisplayName(left) === getTeamDisplayName(right);
+  const normalize = (name: string) => {
+    const value = name.trim().toLocaleLowerCase();
+    return TEAM_IDENTITIES[value] ?? value;
+  };
+  return normalize(left) === normalize(right);
 }
 
 function number(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function scoreFor(row: DatabaseMatchRow) {
@@ -36,8 +66,10 @@ function recentFromRow(row: DatabaseMatchRow, team: string): RecentMatch | null 
   const home = text(row.home_team ?? row.homeTeam);
   const away = text(row.away_team ?? row.awayTeam);
   const score = scoreFor(row);
-  if (!score || (home !== team && away !== team)) return null;
-  const isHome = home === team;
+  const homeMatches = sameTeam(home, team);
+  const awayMatches = sameTeam(away, team);
+  if (!score || (!homeMatches && !awayMatches)) return null;
+  const isHome = homeMatches;
   const goalsFor = isHome ? score.home : score.away;
   const goalsAgainst = isHome ? score.away : score.home;
   return { opponent: isHome ? away : home, score: score.value, result: goalsFor > goalsAgainst ? "win" : goalsFor < goalsAgainst ? "loss" : "draw", venue: isHome ? "home" : "away" };
@@ -52,8 +84,9 @@ function summarize(items: RecentMatch[]): MatchRecentStats {
     summary.losses += item.result === "loss" ? 1 : 0;
     summary.goalsFor += Number.isFinite(goalsFor) ? goalsFor : 0;
     summary.goalsAgainst += Number.isFinite(goalsAgainst) ? goalsAgainst : 0;
+    summary.trend.push(item.result);
     return summary;
-  }, { matches: [], wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0 });
+  }, { matches: [], wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0, trend: [] });
 }
 
 function fallbackRecent(team: "home" | "away", fallback: ReturnType<typeof getMatchById>) {
@@ -71,7 +104,7 @@ function fallbackHeadToHead(fallback: ReturnType<typeof getMatchById>) {
   return fallback?.headToHead.slice(0, 10) ?? [];
 }
 
-function teamIdForName(name: string, fallbackId: string) {
+function teamIdForName(name: string, fallbackId = "") {
   const normalized = name.toLocaleLowerCase();
   const knownIds: Record<string, string> = {
     "manchester united": "33",
@@ -149,34 +182,83 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
   const homeTeam = text(currentRow.home_team) || fallback?.home.name || "主队";
   const awayTeam = text(currentRow.away_team) || fallback?.away.name || "客队";
   const currentTime = dateValue(currentRow);
+  const homeLookupTeam = text(currentRow.home_team_raw) || homeTeam;
+  const awayLookupTeam = text(currentRow.away_team_raw) || awayTeam;
   const relatedRows = rows.filter((row) => text(row.external_id) !== text(currentRow.external_id) && dateValue(row) <= currentTime);
-  const homeDatabaseForm = relatedRows.map((row) => recentFromRow(row, homeTeam)).filter((item): item is RecentMatch => Boolean(item)).slice(0, 5);
-  const awayDatabaseForm = relatedRows.map((row) => recentFromRow(row, awayTeam)).filter((item): item is RecentMatch => Boolean(item)).slice(0, 5);
+  let historyRows: DatabaseMatchRow[] = [];
+  if (supabase) {
+    try {
+      const historyResult = await supabase.from("football_match_history").select("*").order("match_time", { ascending: false }).limit(1000);
+      if (!historyResult.error && Array.isArray(historyResult.data)) historyRows = historyResult.data as DatabaseMatchRow[];
+    } catch {
+      historyRows = [];
+    }
+  }
+  const historicalRows = [...historyRows, ...relatedRows];
+  // Match against raw provider names. The display layer may translate a team
+  // name, while football_match_history keeps the provider's original name.
+  const homeMatchName = homeLookupTeam || homeTeam;
+  const awayMatchName = awayLookupTeam || awayTeam;
+  const homeDatabaseForm = historicalRows.map((row) => recentFromRow(row, homeMatchName)).filter((item): item is RecentMatch => Boolean(item)).slice(0, 5);
+  const awayDatabaseForm = historicalRows.map((row) => recentFromRow(row, awayMatchName)).filter((item): item is RecentMatch => Boolean(item)).slice(0, 5);
   let homeApiForm: RecentMatch[] = [];
   let awayApiForm: RecentMatch[] = [];
+  const homeTeamId = text(currentRow.home_team_id) || teamIdForName(homeLookupTeam);
+  const awayTeamId = text(currentRow.away_team_id) || teamIdForName(awayLookupTeam);
   try {
-    const [homeStats, awayStats] = await Promise.all([
-      getTeamRecentStats(teamIdForName(homeTeam, "33")),
-      getTeamRecentStats(teamIdForName(awayTeam, "40")),
-    ]);
-    if (homeStats.source === "api") homeApiForm = homeStats.recentMatches.slice(0, 5).map(toRecentMatch);
-    if (awayStats.source === "api") awayApiForm = awayStats.recentMatches.slice(0, 5).map(toRecentMatch);
+    if (!homeDatabaseForm.length || !awayDatabaseForm.length) {
+      const [resolvedHomeTeamId, resolvedAwayTeamId] = await Promise.all([
+        resolveFootballTeamId(homeLookupTeam, homeTeamId),
+        resolveFootballTeamId(awayLookupTeam, awayTeamId),
+      ]);
+      if (!homeDatabaseForm.length && resolvedHomeTeamId) {
+      homeApiForm = (await getHistoricalTeamMatches(resolvedHomeTeamId)).slice(0, 5).map((item) => toRecentMatch({
+        opponent: item.homeTeamId === resolvedHomeTeamId ? item.awayTeam : item.homeTeam,
+        score: item.homeTeamId === resolvedHomeTeamId ? `${item.homeScore}-${item.awayScore}` : `${item.awayScore}-${item.homeScore}`,
+        result: item.homeTeamId === resolvedHomeTeamId
+          ? item.homeScore > item.awayScore ? "win" : item.homeScore < item.awayScore ? "loss" : "draw"
+          : item.awayScore > item.homeScore ? "win" : item.awayScore < item.homeScore ? "loss" : "draw",
+        venue: item.homeTeamId === resolvedHomeTeamId ? "home" : "away",
+      }));
+      }
+      if (!awayDatabaseForm.length && resolvedAwayTeamId) {
+      awayApiForm = (await getHistoricalTeamMatches(resolvedAwayTeamId)).slice(0, 5).map((item) => toRecentMatch({
+        opponent: item.homeTeamId === resolvedAwayTeamId ? item.awayTeam : item.homeTeam,
+        score: item.homeTeamId === resolvedAwayTeamId ? `${item.homeScore}-${item.awayScore}` : `${item.awayScore}-${item.homeScore}`,
+        result: item.homeTeamId === resolvedAwayTeamId
+          ? item.homeScore > item.awayScore ? "win" : item.homeScore < item.awayScore ? "loss" : "draw"
+          : item.awayScore > item.homeScore ? "win" : item.awayScore < item.homeScore ? "loss" : "draw",
+        venue: item.homeTeamId === resolvedAwayTeamId ? "home" : "away",
+      }));
+      }
+    }
   } catch {
-    // Continue with database and local fallback data.
+    // Continue with persisted history when the remote provider is unavailable.
   }
   const homeRecent = homeDatabaseForm.length ? homeDatabaseForm : homeApiForm.length ? homeApiForm : [];
   const awayRecent = awayDatabaseForm.length ? awayDatabaseForm : awayApiForm.length ? awayApiForm : [];
   const recent = { home: summarize(homeRecent), away: summarize(awayRecent) };
 
-  const databaseH2H = relatedRows.filter((row) => {
+  const databaseH2H = historicalRows.filter((row) => {
     const rowHome = text(row.home_team);
     const rowAway = text(row.away_team);
-    return scoreFor(row) && ((sameTeam(rowHome, homeTeam) && sameTeam(rowAway, awayTeam)) || (sameTeam(rowHome, awayTeam) && sameTeam(rowAway, homeTeam)));
+    return scoreFor(row) && ((sameTeam(rowHome, homeMatchName) && sameTeam(rowAway, awayMatchName)) || (sameTeam(rowHome, awayMatchName) && sameTeam(rowAway, homeMatchName)));
   }).slice(0, 10).map((row): HeadToHeadMatch => ({ home: getTeamDisplayName(text(row.home_team)), away: getTeamDisplayName(text(row.away_team)), score: scoreFor(row)?.value ?? "-", date: text(row.match_time).slice(0, 10) }));
   let apiH2H: HeadToHeadMatch[] = [];
   if (!databaseH2H.length) {
     try {
-      apiH2H = (await getTeamHeadToHeadMatches(teamIdForName(homeTeam, "33"), teamIdForName(awayTeam, "40"))).map((item) => ({ home: getTeamDisplayName(item.home), away: getTeamDisplayName(item.away), score: item.score, date: item.date }));
+      const [resolvedHomeTeamId, resolvedAwayTeamId] = await Promise.all([
+        resolveFootballTeamId(homeLookupTeam, homeTeamId),
+        resolveFootballTeamId(awayLookupTeam, awayTeamId),
+      ]);
+      if (resolvedHomeTeamId && resolvedAwayTeamId) {
+        apiH2H = (await getHistoricalHeadToHead(resolvedHomeTeamId, resolvedAwayTeamId)).map((item) => ({
+          home: getTeamDisplayName(item.homeTeam),
+          away: getTeamDisplayName(item.awayTeam),
+          score: `${item.homeScore}:${item.awayScore}`,
+          date: item.matchTime.slice(0, 10),
+        }));
+      }
     } catch {
       apiH2H = [];
     }
@@ -184,8 +266,8 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
   const h2hMatches = databaseH2H.length ? databaseH2H : apiH2H;
   const h2hSummary = h2hMatches.reduce((summary, item) => {
     const [homeScore, awayScore] = item.score.split(":").map(Number);
-    const homeWon = sameTeam(item.home, homeTeam) ? homeScore > awayScore : awayScore > homeScore;
-    const awayWon = sameTeam(item.away, awayTeam) ? awayScore > homeScore : homeScore > awayScore;
+    const homeWon = sameTeam(item.home, homeMatchName) ? homeScore > awayScore : awayScore > homeScore;
+    const awayWon = sameTeam(item.away, awayMatchName) ? awayScore > homeScore : homeScore > awayScore;
     summary.homeWins += homeWon ? 1 : 0;
     summary.awayWins += awayWon ? 1 : 0;
     summary.draws += homeScore === awayScore ? 1 : 0;

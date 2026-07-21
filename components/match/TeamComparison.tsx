@@ -100,7 +100,7 @@ export function TeamComparison(props: TeamComparisonProps) {
                 {hasBothValues ? (
                   <span className="font-semibold text-white">{row.home} - {row.away}</span>
                 ) : (
-                  <span className="text-xs font-normal text-slate-500">暂无完整数据</span>
+                  <span className="text-xs font-normal text-slate-500">数据同步中</span>
                 )}
               </div>
               <div className="flex gap-1.5">

@@ -172,6 +172,7 @@ export type MatchRecentStats = {
   losses: number;
   goalsFor: number;
   goalsAgainst: number;
+  trend: RecentMatch["result"][];
 };
 
 export type MatchMetric = {

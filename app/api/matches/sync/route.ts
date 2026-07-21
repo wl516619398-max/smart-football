@@ -33,6 +33,8 @@ export async function POST(request: Request) {
       league: fixture.league,
       home_team: fixture.homeTeam.name,
       away_team: fixture.awayTeam.name,
+      home_team_id: fixture.homeTeam.id,
+      away_team_id: fixture.awayTeam.id,
       match_time: fixture.date,
       home_logo: fixture.homeTeam.logo ?? null,
       away_logo: fixture.awayTeam.logo ?? null,

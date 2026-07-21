@@ -1,0 +1,262 @@
+import { footballApiRawRequest } from "@/lib/football/api";
+import type { ApiFootballFixture } from "@/lib/football/types";
+
+export type FootballHistoryProvider = "football-data" | "api-football" | "thesportsdb";
+
+export type HistoricalMatch = {
+  externalId: string;
+  provider: FootballHistoryProvider;
+  league: string;
+  matchTime: string;
+  status: string;
+  homeTeamId: string;
+  homeTeam: string;
+  awayTeamId: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  venue?: string;
+};
+
+type RecordValue = Record<string, unknown>;
+
+function record(value: unknown): RecordValue | null {
+  return typeof value === "object" && value !== null ? value as RecordValue : null;
+}
+
+function stringValue(value: unknown, fallback = "") {
+  return typeof value === "string" ? value : value === null || value === undefined ? fallback : String(value);
+}
+
+function numberValue(value: unknown): number | null {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function arrayValue(value: unknown) {
+  return Array.isArray(value) ? value : [];
+}
+
+function providerFromEnv(): FootballHistoryProvider | null {
+  const explicit = process.env.FOOTBALL_API_PROVIDER?.trim().toLowerCase();
+  if (explicit === "football-data" || explicit === "api-football" || explicit === "thesportsdb") return explicit;
+  if (process.env.FOOTBALL_API_KEY?.trim()) return "api-football";
+  if (process.env.FOOTBALL_DATA_API_KEY?.trim()) return "football-data";
+  if (process.env.THESPORTSDB_API_KEY?.trim() || process.env.FOOTBALL_DATA_PROVIDER === "api") return "thesportsdb";
+  return null;
+}
+
+export function getFootballHistoryProvider(): FootballHistoryProvider | null {
+  return providerFromEnv();
+}
+
+const API_FOOTBALL_TEAM_ALIASES: Record<string, string> = {
+  "manchester united": "33",
+  "曼联": "33",
+  "曼彻斯特联": "33",
+  liverpool: "40",
+  "利物浦": "40",
+  "manchester city": "50",
+  "曼城": "50",
+  arsenal: "42",
+  "阿森纳": "42",
+  chelsea: "49",
+  "切尔西": "49",
+  "real madrid": "541",
+  "皇家马德里": "541",
+  barcelona: "529",
+  "巴塞罗那": "529",
+  "bayern munich": "157",
+  "拜仁慕尼黑": "157",
+};
+
+function seasonCandidates() {
+  const configured = process.env.FOOTBALL_SEASON?.trim() || "2024";
+  return [...new Set([configured, "2024", "2023", "2022"])] as string[];
+}
+
+function isApiFootballError(payload: { errors?: unknown } | null) {
+  if (!payload?.errors) return false;
+  return Array.isArray(payload.errors) ? payload.errors.length > 0 : Object.keys(record(payload.errors) || {}).length > 0;
+}
+
+function normalizeApiFootballFixture(fixture: ApiFootballFixture, provider: "api-football"): HistoricalMatch | null {
+  const homeScore = numberValue(fixture.goals?.home);
+  const awayScore = numberValue(fixture.goals?.away);
+  if (homeScore === null || awayScore === null) return null;
+  return {
+    externalId: String(fixture.fixture.id),
+    provider,
+    league: fixture.league?.name || "",
+    matchTime: fixture.fixture.date,
+    status: "finished",
+    homeTeamId: String(fixture.teams.home.id),
+    homeTeam: fixture.teams.home.name,
+    awayTeamId: String(fixture.teams.away.id),
+    awayTeam: fixture.teams.away.name,
+    homeScore,
+    awayScore,
+    venue: fixture.fixture.venue?.name || undefined,
+  };
+}
+
+async function getApiFootballFixtures(params: Record<string, string | number>, path = "fixtures") {
+  const payload = await footballApiRawRequest<ApiFootballFixture[]>(path, params);
+  if (!payload || isApiFootballError(payload)) return [];
+  return Array.isArray(payload.response) ? payload.response : [];
+}
+
+async function getApiFootballTeamHistory(teamId: string) {
+  for (const season of seasonCandidates()) {
+    const fixtures = await getApiFootballFixtures({ team: teamId, season });
+    const matches = fixtures
+      .map((fixture) => normalizeApiFootballFixture(fixture, "api-football"))
+      .filter((item): item is HistoricalMatch => Boolean(item))
+      .sort((left, right) => Date.parse(right.matchTime) - Date.parse(left.matchTime));
+    if (matches.length) return matches.slice(0, 10);
+  }
+  return [];
+}
+
+async function getApiFootballHeadToHead(homeTeamId: string, awayTeamId: string) {
+  return (await getApiFootballFixtures({ h2h: `${homeTeamId}-${awayTeamId}` }, "fixtures/headtohead"))
+    .map((fixture) => normalizeApiFootballFixture(fixture, "api-football"))
+    .filter((item): item is HistoricalMatch => Boolean(item))
+    .sort((left, right) => Date.parse(right.matchTime) - Date.parse(left.matchTime))
+    .slice(0, 10);
+}
+
+async function apiFootballSearchTeam(name: string) {
+  const payload = await footballApiRawRequest<Array<{ team?: { id?: number; name?: string } }>>("teams", { search: name });
+  if (!payload || isApiFootballError(payload)) return null;
+  const normalized = name.toLocaleLowerCase();
+  const found = (payload.response || []).find((item) => item.team?.name?.toLocaleLowerCase() === normalized) || payload.response?.[0];
+  return found?.team?.id ? String(found.team.id) : null;
+}
+
+function sportsDbBase() {
+  const key = process.env.THESPORTSDB_API_KEY?.trim() || "3";
+  return `https://www.thesportsdb.com/api/v1/json/${encodeURIComponent(key)}`;
+}
+
+async function requestJson(url: string) {
+  try {
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) return null;
+    return record(await response.json());
+  } catch {
+    return null;
+  }
+}
+
+function normalizeSportsDbEvent(event: RecordValue, provider: "thesportsdb"): HistoricalMatch | null {
+  const homeScore = numberValue(event.intHomeScore);
+  const awayScore = numberValue(event.intAwayScore);
+  const externalId = stringValue(event.idEvent);
+  const matchTime = stringValue(event.dateEvent);
+  if (homeScore === null || awayScore === null || !externalId || !matchTime) return null;
+  return {
+    externalId,
+    provider,
+    league: stringValue(event.strLeague),
+    matchTime,
+    status: "finished",
+    homeTeamId: stringValue(event.idHomeTeam),
+    homeTeam: stringValue(event.strHomeTeam),
+    awayTeamId: stringValue(event.idAwayTeam),
+    awayTeam: stringValue(event.strAwayTeam),
+    homeScore,
+    awayScore,
+    venue: stringValue(event.strVenue) || undefined,
+  };
+}
+
+async function getSportsDbTeamHistory(teamId: string) {
+  const payload = await requestJson(`${sportsDbBase()}/eventslast.php?id=${encodeURIComponent(teamId)}`);
+  return arrayValue(payload?.results)
+    .map((item) => normalizeSportsDbEvent(record(item) || {}, "thesportsdb"))
+    .filter((item): item is HistoricalMatch => Boolean(item))
+    .sort((left, right) => Date.parse(right.matchTime) - Date.parse(left.matchTime))
+    .slice(0, 10);
+}
+
+async function getSportsDbHeadToHead(homeTeamId: string, awayTeamId: string) {
+  const payload = await requestJson(`${sportsDbBase()}/eventsh2h.php?id=${encodeURIComponent(homeTeamId)}&id2=${encodeURIComponent(awayTeamId)}`);
+  return arrayValue(payload?.event)
+    .map((item) => normalizeSportsDbEvent(record(item) || {}, "thesportsdb"))
+    .filter((item): item is HistoricalMatch => Boolean(item))
+    .sort((left, right) => Date.parse(right.matchTime) - Date.parse(left.matchTime))
+    .slice(0, 10);
+}
+
+async function sportsDbSearchTeam(name: string) {
+  const payload = await requestJson(`${sportsDbBase()}/searchteams.php?t=${encodeURIComponent(name)}`);
+  const team = record(arrayValue(payload?.teams)[0]);
+  return stringValue(team?.idTeam) || null;
+}
+
+async function footballDataHistory(teamId: string) {
+  const key = process.env.FOOTBALL_DATA_API_KEY?.trim();
+  if (!key) return [];
+  const base = (process.env.FOOTBALL_DATA_API_BASE_URL || "https://api.football-data.org/v4").replace(/\/$/, "");
+  const response = await fetch(`${base}/teams/${encodeURIComponent(teamId)}/matches?status=FINISHED&limit=10`, {
+    headers: { Accept: "application/json", "X-Auth-Token": key },
+    cache: "no-store",
+  });
+  if (!response.ok) return [];
+  const payload = record(await response.json());
+  return arrayValue(payload?.matches).map((item): HistoricalMatch | null => {
+    const event = record(item) || {};
+    const home = record(event.homeTeam) || {};
+    const away = record(event.awayTeam) || {};
+    const score = record(event.score) || {};
+    const fullTime = record(score.fullTime) || {};
+    const homeScore = numberValue(fullTime.home);
+    const awayScore = numberValue(fullTime.away);
+    if (homeScore === null || awayScore === null) return null;
+    return {
+      externalId: stringValue(event.id), provider: "football-data" as const, league: stringValue(record(event.competition)?.name), matchTime: stringValue(event.utcDate), status: "finished",
+      homeTeamId: stringValue(home.id), homeTeam: stringValue(home.name), awayTeamId: stringValue(away.id), awayTeam: stringValue(away.name),
+      homeScore, awayScore, venue: stringValue(event.venue) || undefined,
+    };
+  }).filter((item): item is HistoricalMatch => Boolean(item && item.externalId));
+}
+
+async function footballDataSearchTeam(name: string) {
+  const key = process.env.FOOTBALL_DATA_API_KEY?.trim();
+  if (!key) return null;
+  const base = (process.env.FOOTBALL_DATA_API_BASE_URL || "https://api.football-data.org/v4").replace(/\/$/, "");
+  const response = await fetch(`${base}/teams?name=${encodeURIComponent(name)}`, { headers: { Accept: "application/json", "X-Auth-Token": key }, cache: "no-store" });
+  if (!response.ok) return null;
+  const payload = record(await response.json());
+  return stringValue(record(arrayValue(payload?.teams)[0])?.id) || null;
+}
+
+export async function resolveFootballTeamId(name: string, knownId?: string | null) {
+  const provider = providerFromEnv();
+  if (provider === "api-football") {
+    const normalizedName = name.trim().toLocaleLowerCase();
+    if (/^\d+$/.test(knownId?.trim() || "")) return knownId!.trim();
+    if (API_FOOTBALL_TEAM_ALIASES[normalizedName]) return API_FOOTBALL_TEAM_ALIASES[normalizedName];
+    return apiFootballSearchTeam(name);
+  }
+  if (knownId?.trim()) return knownId.trim();
+  if (provider === "thesportsdb") return sportsDbSearchTeam(name);
+  if (provider === "football-data") return footballDataSearchTeam(name);
+  return null;
+}
+
+export async function getHistoricalTeamMatches(teamId: string) {
+  const provider = providerFromEnv();
+  if (!provider) return [];
+  if (provider === "api-football") return getApiFootballTeamHistory(teamId);
+  if (provider === "thesportsdb") return getSportsDbTeamHistory(teamId);
+  return footballDataHistory(teamId);
+}
+
+export async function getHistoricalHeadToHead(homeTeamId: string, awayTeamId: string) {
+  const provider = providerFromEnv();
+  if (provider === "api-football") return getApiFootballHeadToHead(homeTeamId, awayTeamId);
+  if (provider === "thesportsdb") return getSportsDbHeadToHead(homeTeamId, awayTeamId);
+  return [];
+}

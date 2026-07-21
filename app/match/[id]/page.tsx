@@ -13,19 +13,19 @@ import { assessRisk } from "@/lib/ai/risk-engine";
 import { detectUpset } from "@/lib/ai/upset-engine";
 
 export function generateStaticParams() {
-  return matchDetails.map((match) => ({ slug: match.id }));
+  return matchDetails.map((match) => ({ id: match.id }));
 }
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
-  const { slug } = await params;
-  const result = getCommercialMatchBySlug(slug);
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const result = getCommercialMatchBySlug(id);
   if (!result) return { title: "比赛详情 | Project Athena" };
   return { title: `${result.match.home.name} VS ${result.match.away.name} | Project Athena`, description: "Athena AI 足球赛事数据分析，包含模型估算概率、球队实力、球员状态、市场数据变化与深度报告。" };
 }
 
-export default async function MatchDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-  const result = getCommercialMatchBySlug(slug);
+export default async function MatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const result = getCommercialMatchBySlug(id);
   if (!result) notFound();
   const { match, commercial } = result;
   const footballMatch = getFootballMatchFallback(match.id);
@@ -41,7 +41,7 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ sl
   const risk = assessRisk(footballMatch, prediction);
   const oddsAnalysis = analyzeOdds(footballMatch, prediction);
   const upsetAnalysis = detectUpset(footballMatch, prediction);
-  const report = `根据最近比赛、主客场表现、进球失球、xG、排名与市场数据综合分析，模型观点为${prediction.recommendation}，模型预测比分为 ${prediction.score[0]}。数据样本存在局限性，比赛结果仍有不确定性。`;
+  const report = `根据最近比赛、主客场表现、进球失球、xG、排名与市场数据综合分析，模型观点为${prediction.recommendation}，模型预测比分为 ${prediction.score[0]}。数据样本存在局限性，比赛结果仍具有不确定性。`;
   const aiLean = prediction.recommendation === "主胜" ? "偏向主胜" : prediction.recommendation === "客胜" ? "偏向客胜" : "防范平局";
   const recommendation = `${prediction.recommendation}方向，关注${prediction.score[0]}等候选比分，仅供赛事研究参考。`;
 

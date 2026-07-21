@@ -48,12 +48,20 @@ function toMatchRow(match: FootballMatch) {
     league: match.league,
     home_team: match.homeTeam.name,
     away_team: match.awayTeam.name,
+    home_team_id: match.homeTeam.id,
+    away_team_id: match.awayTeam.id,
     match_time: match.date,
     home_win: prediction.homeWin,
     draw: prediction.draw,
     away_win: prediction.awayWin,
     ai_score: prediction.confidence,
   };
+}
+
+function hasExternalTeamIds(match: FootballMatch) {
+  return /^\d+$/.test(match.id)
+    && /^\d+$/.test(match.homeTeam.id)
+    && /^\d+$/.test(match.awayTeam.id);
 }
 
 function uniqueLeagueNames(matches: FootballMatch[], standings: FootballStanding[]) {
@@ -73,7 +81,11 @@ async function getMatchesWithFallback(query: { from: string; to: string }) {
   try {
     const matches = await configuredProvider.getMatches(query);
     if (matches.length > 0) {
-      return { matches, provider: configuredSource, usedMockFallback: configuredProvider.kind === "mock" };
+      return {
+        matches,
+        provider: configuredSource,
+        usedMockFallback: configuredProvider.kind === "mock" || !matches.every(hasExternalTeamIds),
+      };
     }
   } catch (error) {
     console.error("[cron/sync-matches] football provider failed:", error);

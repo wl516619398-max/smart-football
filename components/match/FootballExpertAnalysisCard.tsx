@@ -24,7 +24,7 @@ export function FootballExpertAnalysisCard({ analysis }: FootballExpertAnalysisC
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="flex items-center gap-2 text-xs text-amber-200"><ShieldAlert className="h-4 w-4" />激进</p><p className="mt-3 text-sm leading-6 text-slate-300">{analysis.recommendation.risk}</p></div>
           <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4"><p className="flex items-center gap-2 text-xs text-blue-200"><Target className="h-4 w-4" />进球方向</p><p className="mt-3 text-sm leading-6 text-slate-300">{analysis.recommendation.goals}</p></div>
         </div>
-        <div className="flex flex-wrap items-center gap-3 border-t border-white/10 pt-5"><span className="text-xs text-slate-500">预测比分</span>{analysis.predictedScores.map((score) => <span key={score} className="rounded-full border border-blue-400/20 bg-blue-500/10 px-3 py-1.5 text-sm font-semibold text-blue-200">{score}</span>)}<span className="ml-auto rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">模型一致性 {analysis.confidence}%</span></div>
+        <div className="flex flex-wrap items-center gap-3 border-t border-white/10 pt-5"><span className="text-xs text-slate-500">预测比分</span>{analysis.predictedScores.map((score) => <span key={score} className="rounded-full border border-blue-400/20 bg-blue-500/10 px-3 py-1.5 text-sm font-semibold text-blue-200">{score}</span>)}<span className="ml-auto rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">AI判断可信度 {analysis.confidence}%</span></div>
       </CardContent>
     </Card>
   );

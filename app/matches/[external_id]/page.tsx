@@ -6,8 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getFixtureDetail } from "@/lib/football/fixture-service";
 import { footballMatchToMatchCenterRow } from "@/lib/football/match-center";
-import { AIAnalysis } from "@/components/match/AIAnalysis";
-import { AIQuickAnalysis } from "@/components/match/AIQuickAnalysis";
+import { AIAnalysisPending } from "@/components/match/AIAnalysisPending";
 import { AIFocusFactors } from "@/components/match/AIFocusFactors";
 import { AIMetrics } from "@/components/match/AIMetrics";
 import { HeadToHeadOverview } from "@/components/match/HeadToHeadOverview";
@@ -19,7 +18,6 @@ import { predictMatch as predictFromTeamStats } from "@/lib/prediction/engine";
 import type { PredictionTeamStats } from "@/lib/prediction/types";
 import { PredictionEngineCard } from "@/components/match/PredictionEngineCard";
 import { AthenaReportCard } from "@/components/match/AthenaReportCard";
-import { analyzeFootballMatch } from "@/lib/ai/football-analyzer";
 import { getFixtureOdds } from "@/lib/football/odds";
 import { calculateOddsValue } from "@/lib/odds/value-engine";
 import { savePredictionHistory } from "@/lib/history/prediction-history";
@@ -32,10 +30,11 @@ import { CopyAnalysisButton } from "@/components/common/CopyAnalysisButton";
 import { MatchResearchInsights } from "@/components/match/MatchResearchInsights";
 import { DataSourceCard } from "@/components/match/DataSourceCard";
 import { getTeamDisplayName } from "@/lib/football/team-name-map";
+import { getAiMatchAnalysis } from "@/lib/db/ai-match-analysis";
 
 export const metadata: Metadata = {
   title: "比赛详情 | Project Athena",
-  description: "查看比赛模型估算概率、模型观点、模型一致性与智能分析。",
+  description: "查看比赛模型估算概率、AI判断可信度、赛前趋势与智能分析。",
 };
 
 type MatchRow = {
@@ -64,14 +63,29 @@ async function getMatchByExternalId(externalId: string): Promise<MatchRow | null
       .eq("external_id", externalId)
       .maybeSingle();
 
-    if (!error && data) return { ...(data as MatchRow), home_team: getTeamDisplayName((data as MatchRow).home_team), away_team: getTeamDisplayName((data as MatchRow).away_team) };
+    if (!error && data) {
+      const row = data as MatchRow;
+      return {
+        ...row,
+        home_team_raw: row.home_team,
+        away_team_raw: row.away_team,
+        home_team: getTeamDisplayName(row.home_team),
+        away_team: getTeamDisplayName(row.away_team),
+      };
+    }
     if (error) console.error("Failed to load match detail, using football API fallback:", error);
   }
 
   const fixture = await getFixtureDetail(externalId);
   if (!fixture) return null;
   const row = footballMatchToMatchCenterRow(fixture) as MatchRow;
-  return { ...row, home_team: getTeamDisplayName(row.home_team), away_team: getTeamDisplayName(row.away_team) };
+  return {
+    ...row,
+    home_team_raw: row.home_team,
+    away_team_raw: row.away_team,
+    home_team: getTeamDisplayName(row.home_team),
+    away_team: getTeamDisplayName(row.away_team),
+  };
 }
 
 function formatMatchTime(value: string | null) {
@@ -158,9 +172,10 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
   const analysisHomeTeam = match.home_team || "涓婚槦";
   const analysisAwayTeam = match.away_team || "瀹㈤槦";
   const analysisData = await getMatchAnalysisData(externalId, match);
-  const [engineContext, fixtureOdds] = await Promise.all([
+  const [engineContext, fixtureOdds, storedAiAnalysis] = await Promise.all([
     getEnginePrediction(),
     getFixtureOdds(externalId),
+    getAiMatchAnalysis(externalId),
   ]);
   const oddsValue = calculateOddsValue({
     prediction: {
@@ -182,14 +197,7 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
     confidence: engineContext.prediction.confidence,
     odds_value: Math.max(oddsValue.value.home, oddsValue.value.draw, oddsValue.value.away),
   });
-  const expertAnalysis = await analyzeFootballMatch({
-    homeTeam: analysisHomeTeam,
-    awayTeam: analysisAwayTeam,
-    homeTeamStats: engineContext.homeTeamStats,
-    awayTeamStats: engineContext.awayTeamStats,
-    prediction: engineContext.prediction,
-  });
-
+  const expertAnalysis = { recommendation: { risk: storedAiAnalysis?.risk_warning ?? "AI分析将在赛前生成" } };
   const homeTeam = match.home_team || "主队";
   const awayTeam = match.away_team || "客队";
   const bestValue = Math.max(oddsValue.value.home, oddsValue.value.draw, oddsValue.value.away);
@@ -199,30 +207,8 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
     `Value价值：${(bestValue * 100).toFixed(1)}%`,
     `关注方向：${engineContext.prediction.recommendation[0] ?? "双方数据接近"}`,
     `风险提示：${expertAnalysis.recommendation.risk}`,
-    `模型一致性：${engineContext.prediction.confidence}%`,
+    `AI判断可信度：${engineContext.prediction.confidence}%`,
   ].join("\n");
-  const aiRequest = {
-    external_id: match.external_id,
-    matchId: match.external_id,
-    homeTeam: { name: homeTeam, metrics: analysisData.metrics },
-    awayTeam: { name: awayTeam, metrics: analysisData.metrics },
-    league: match.league || "",
-    recentForm: analysisData.recent,
-    h2h: analysisData.headToHead,
-    standings: {},
-    attackStrength: { home: analysisData.metrics[0]?.home ?? null, away: analysisData.metrics[0]?.away ?? null },
-    defenseStrength: { home: analysisData.metrics[1]?.home ?? null, away: analysisData.metrics[1]?.away ?? null },
-    injuries: [],
-    matchTime: match.match_time || "",
-    probabilities: { homeWin: match.home_win, draw: match.draw, awayWin: match.away_win },
-    homeWin: match.home_win,
-    draw: match.draw,
-    awayWin: match.away_win,
-    metrics: analysisData.metrics,
-    headToHead: analysisData.headToHead,
-    focusFactors: analysisData.focusFactors,
-  };
-
   return (
     <main className="mx-auto min-h-[calc(100vh-140px)] w-full max-w-6xl px-4 py-8 text-slate-100 sm:px-6 lg:px-8">
       <Link href="/matches" className="inline-flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white">
@@ -249,7 +235,6 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
               <span className="text-xs text-slate-500">客队</span>
             </div>
           </div>
-          <AIQuickAnalysis request={aiRequest} />
         </div>
       </section>
 
@@ -274,15 +259,15 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
           />
         </div>
         <OddsValueCard odds={fixtureOdds} value={oddsValue} />
-        <AthenaReportCard
+        {storedAiAnalysis ? <AthenaReportCard
           homeTeam={homeTeam}
           awayTeam={awayTeam}
           homeStats={engineContext.homeTeamStats}
           awayStats={engineContext.awayTeamStats}
           prediction={engineContext.prediction}
           oddsValue={oddsValue}
-          analysis={expertAnalysis}
-        />
+          preGeneratedAnalysis={storedAiAnalysis}
+        /> : <AIAnalysisPending />}
         <MatchResearchInsights
           homeTeam={homeTeam}
           awayTeam={awayTeam}
@@ -300,7 +285,7 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
             <ProbabilityBar label="主胜模型估算概率" value={engineContext.prediction.homeWin} tone="bg-blue-500" />
             <ProbabilityBar label="平局率" value={match.draw} tone="bg-slate-400" />
             <ProbabilityBar label="客胜模型估算概率" value={engineContext.prediction.awayWin} tone="bg-emerald-500" />
-            <div className="grid grid-cols-2 gap-3 border-t border-slate-800 pt-5 text-center"><div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4"><p className="text-xs text-slate-500">模型观点</p><p className="mt-2 text-lg font-semibold text-blue-300">{match.ai_pick || "分析生成中"}</p></div><div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4"><p className="text-xs text-slate-500">模型一致性</p><p className="mt-2 text-lg font-semibold text-emerald-400">{probability(match.ai_score)}</p></div></div>
+            <div className="grid grid-cols-2 gap-3 border-t border-slate-800 pt-5 text-center"><div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4"><p className="text-xs text-slate-500">模型观点</p><p className="mt-2 text-lg font-semibold text-blue-300">{match.ai_pick || "分析生成中"}</p></div><div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4"><p className="text-xs text-slate-500">AI判断可信度</p><p className="mt-2 text-lg font-semibold text-emerald-400">{probability(match.ai_score)}</p><p className="mt-2 text-xs leading-5 text-slate-500">AI根据球队实力、近期表现、攻防数据综合计算，数据越完整，判断越可靠。</p></div></div>
           </CardContent>
         </Card>
 
@@ -320,7 +305,6 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
         <HeadToHeadOverview homeTeam={homeTeam} awayTeam={awayTeam} data={analysisData.headToHead} />
       </div>
 
-      <AIAnalysis request={aiRequest} />
       <div className="mt-6"><DataSourceCard generatedAt={new Date().toISOString()} /></div>
       <Disclaimer className="mt-8" />
     </main>

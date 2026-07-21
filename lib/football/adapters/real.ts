@@ -26,7 +26,10 @@ function asRecord(value: unknown): RecordValue | null {
 }
 
 function readString(record: RecordValue | null, key: string, fallback = "") {
-  return typeof record?.[key] === "string" ? record[key] as string : fallback;
+  const value = record?.[key];
+  if (typeof value === "string") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return fallback;
 }
 
 function readNumber(record: RecordValue | null, key: string, fallback = 0) {
@@ -236,9 +239,31 @@ function createApiFootballSource(): RealFootballSource | null {
 
   return {
     name: "api-football",
-    async getUpcomingMatches() {
-      const response = await request("fixtures", { next: 10 });
-      const normalized = (response || []).map((item) => {
+    async getUpcomingMatches(query) {
+      // API-Football free plans do not allow the `next` parameter. Requesting
+      // each date also keeps this adapter compatible with the free plan's
+      // limited forward-looking date window.
+      const range = getDateRange(query);
+      const from = new Date(`${range.from}T00:00:00Z`);
+      const to = new Date(`${range.to}T00:00:00Z`);
+      const dateKeys: string[] = [];
+
+      if (!Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime())) {
+        for (const cursor = new Date(from); cursor <= to && dateKeys.length <= 14; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+          dateKeys.push(cursor.toISOString().slice(0, 10));
+        }
+      }
+
+      const fixtures: unknown[] = [];
+      for (const date of dateKeys) {
+        const response = await request("fixtures", { date });
+        // A null response indicates a plan/rate-limit/provider error. Stop
+        // here so a free API key is not exhausted by futile future requests.
+        if (response === null) break;
+        fixtures.push(...response);
+      }
+
+      const normalized = fixtures.map((item) => {
         const fixture = asRecord(item);
         const fixtureInfo = readRecord(fixture, "fixture");
         const league = readRecord(fixture, "league");
