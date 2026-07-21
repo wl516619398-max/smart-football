@@ -1,4 +1,5 @@
 import { footballApiRawRequest } from "@/lib/football/api";
+import { getFootballSeasonCandidates } from "@/lib/football/season";
 import type { ApiFootballFixture } from "@/lib/football/types";
 
 export type FootballHistoryProvider = "football-data" | "api-football" | "thesportsdb";
@@ -71,8 +72,7 @@ const API_FOOTBALL_TEAM_ALIASES: Record<string, string> = {
 };
 
 function seasonCandidates() {
-  const configured = process.env.FOOTBALL_SEASON?.trim() || "2024";
-  return [...new Set([configured, "2024", "2023", "2022"])] as string[];
+  return getFootballSeasonCandidates();
 }
 
 function isApiFootballError(payload: { errors?: unknown } | null) {

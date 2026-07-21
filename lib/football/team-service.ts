@@ -1,6 +1,7 @@
 import { requestFootballApi } from "@/lib/football/api-client";
 import type { ApiFootballTeamStatistics, FootballTeamStats } from "@/lib/football/types";
 import { getFootballTeamStatsFallback } from "@/data/matches";
+import { getFootballSeasonCandidates } from "@/lib/football/season";
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
@@ -36,7 +37,9 @@ function normalizeTeamStats(stats: ApiFootballTeamStatistics): FootballTeamStats
 
 export async function getTeamStats(teamId: string): Promise<FootballTeamStats> {
   const league = process.env.FOOTBALL_LEAGUE_ID || "39";
-  const season = process.env.FOOTBALL_SEASON || "2025";
-  const remoteStats = await requestFootballApi<ApiFootballTeamStatistics>("teams/statistics", { team: teamId, league, season });
-  return remoteStats ? normalizeTeamStats(remoteStats) : getFootballTeamStatsFallback(teamId);
+  for (const season of getFootballSeasonCandidates()) {
+    const remoteStats = await requestFootballApi<ApiFootballTeamStatistics>("teams/statistics", { team: teamId, league, season });
+    if (remoteStats) return normalizeTeamStats(remoteStats);
+  }
+  return getFootballTeamStatsFallback(teamId);
 }

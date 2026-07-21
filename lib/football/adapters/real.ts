@@ -1,4 +1,5 @@
 import { createMockFootballAdapter } from "@/lib/football/adapters/mock";
+import { getFootballSeasonCandidates } from "@/lib/football/season";
 import type { FootballApiAdapter } from "@/lib/football/adapters/types";
 import type { FootballDataQuery } from "@/lib/football/data-provider";
 import type {
@@ -119,8 +120,7 @@ function getDateRange(query?: FootballDataQuery) {
 }
 
 function getSeasonCandidates() {
-  const configuredSeason = process.env.FOOTBALL_SEASON?.trim() || "2024";
-  return [...new Set([configuredSeason, "2024", "2023", "2022"])];
+  return getFootballSeasonCandidates();
 }
 
 async function requestJson(url: string, headers?: HeadersInit): Promise<unknown | null> {
@@ -305,30 +305,32 @@ function createApiFootballSource(): RealFootballSource | null {
     },
     async getStandings() {
       const league = process.env.FOOTBALL_LEAGUE_ID || "39";
-      const season = process.env.FOOTBALL_SEASON || "2025";
-      const response = await request("standings", { league, season });
-      const first = asRecord(response?.[0]);
-      const groups = readArray(readRecord(first, "league"), "standings");
-      const rows = Array.isArray(groups[0]) ? groups[0] : groups;
-      const standings = rows.map((item) => {
-        const row = asRecord(item);
-        const team = readRecord(row, "team");
-        const all = readRecord(row, "all");
-        return {
-          teamId: readString(team, "id"),
-          teamName: readString(team, "name"),
-          league: readString(readRecord(first, "league"), "name"),
-          rank: readNumber(row, "rank", 20),
-          played: readNumber(all, "played"),
-          points: readNumber(row, "points"),
-          wins: readNumber(all, "win"),
-          draws: readNumber(all, "draw"),
-          losses: readNumber(all, "lose"),
-          goalsFor: readNumber(readRecord(all, "goals"), "for"),
-          goalsAgainst: readNumber(readRecord(all, "goals"), "against"),
-        } satisfies FootballStanding;
-      }).filter((standing) => standing.teamId && standing.teamName);
-      return standings.length ? standings : null;
+      for (const season of getSeasonCandidates()) {
+        const response = await request("standings", { league, season });
+        const first = asRecord(response?.[0]);
+        const groups = readArray(readRecord(first, "league"), "standings");
+        const rows = Array.isArray(groups[0]) ? groups[0] : groups;
+        const standings = rows.map((item) => {
+          const row = asRecord(item);
+          const team = readRecord(row, "team");
+          const all = readRecord(row, "all");
+          return {
+            teamId: readString(team, "id"),
+            teamName: readString(team, "name"),
+            league: readString(readRecord(first, "league"), "name"),
+            rank: readNumber(row, "rank", 20),
+            played: readNumber(all, "played"),
+            points: readNumber(row, "points"),
+            wins: readNumber(all, "win"),
+            draws: readNumber(all, "draw"),
+            losses: readNumber(all, "lose"),
+            goalsFor: readNumber(readRecord(all, "goals"), "for"),
+            goalsAgainst: readNumber(readRecord(all, "goals"), "against"),
+          } satisfies FootballStanding;
+        }).filter((standing) => standing.teamId && standing.teamName);
+        if (standings.length) return standings;
+      }
+      return null;
     },
   };
 }

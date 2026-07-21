@@ -1,5 +1,6 @@
 import { footballApiRawRequest } from "@/lib/football/api";
 import { getFootballDataProvider } from "@/lib/football/data-provider";
+import { getFootballSeasonCandidates } from "@/lib/football/season";
 import type { ApiFootballFixture, FootballRecentMatch } from "@/lib/football/types";
 
 export type TeamRecentStats = {
@@ -47,8 +48,7 @@ function toFiniteNumber(value: unknown): number | null {
 }
 
 function getSeasonCandidates() {
-  const configuredSeason = process.env.FOOTBALL_SEASON?.trim() || "2024";
-  return [...new Set([configuredSeason, "2024", "2023", "2022"])];
+  return getFootballSeasonCandidates();
 }
 
 function parseApiFootballFixture(fixture: ApiFootballFixture, teamId: string): { match: FootballRecentMatch; teamName: string } | null {
