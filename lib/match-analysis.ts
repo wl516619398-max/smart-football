@@ -62,12 +62,22 @@ function dateValue(row: DatabaseMatchRow) {
   return Number.isNaN(date.getTime()) ? 0 : date.getTime();
 }
 
-function recentFromRow(row: DatabaseMatchRow, team: string): RecentMatch | null {
+function normalizedId(value: unknown) {
+  return text(value).trim();
+}
+
+function teamMatches(row: DatabaseMatchRow, side: "home" | "away", team: string, teamId?: string) {
+  const rowTeamId = normalizedId(row[`${side}_team_id`] ?? row[`${side}TeamId`]);
+  if (teamId && rowTeamId) return rowTeamId === teamId;
+  return sameTeam(text(row[`${side}_team`] ?? row[`${side}Team`]), team);
+}
+
+function recentFromRow(row: DatabaseMatchRow, team: string, teamId?: string): RecentMatch | null {
   const home = text(row.home_team ?? row.homeTeam);
   const away = text(row.away_team ?? row.awayTeam);
   const score = scoreFor(row);
-  const homeMatches = sameTeam(home, team);
-  const awayMatches = sameTeam(away, team);
+  const homeMatches = teamMatches(row, "home", team, teamId);
+  const awayMatches = teamMatches(row, "away", team, teamId);
   if (!score || (!homeMatches && !awayMatches)) return null;
   const isHome = homeMatches;
   const goalsFor = isHome ? score.home : score.away;
@@ -199,12 +209,12 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
   // name, while football_match_history keeps the provider's original name.
   const homeMatchName = homeLookupTeam || homeTeam;
   const awayMatchName = awayLookupTeam || awayTeam;
-  const homeDatabaseForm = historicalRows.map((row) => recentFromRow(row, homeMatchName)).filter((item): item is RecentMatch => Boolean(item)).slice(0, 5);
-  const awayDatabaseForm = historicalRows.map((row) => recentFromRow(row, awayMatchName)).filter((item): item is RecentMatch => Boolean(item)).slice(0, 5);
-  let homeApiForm: RecentMatch[] = [];
-  let awayApiForm: RecentMatch[] = [];
   const homeTeamId = text(currentRow.home_team_id) || teamIdForName(homeLookupTeam);
   const awayTeamId = text(currentRow.away_team_id) || teamIdForName(awayLookupTeam);
+  const homeDatabaseForm = historicalRows.map((row) => recentFromRow(row, homeMatchName, homeTeamId)).filter((item): item is RecentMatch => Boolean(item)).slice(0, 5);
+  const awayDatabaseForm = historicalRows.map((row) => recentFromRow(row, awayMatchName, awayTeamId)).filter((item): item is RecentMatch => Boolean(item)).slice(0, 5);
+  let homeApiForm: RecentMatch[] = [];
+  let awayApiForm: RecentMatch[] = [];
   try {
     if (!homeDatabaseForm.length || !awayDatabaseForm.length) {
       const [resolvedHomeTeamId, resolvedAwayTeamId] = await Promise.all([
@@ -242,7 +252,14 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
   const databaseH2H = historicalRows.filter((row) => {
     const rowHome = text(row.home_team);
     const rowAway = text(row.away_team);
-    return scoreFor(row) && ((sameTeam(rowHome, homeMatchName) && sameTeam(rowAway, awayMatchName)) || (sameTeam(rowHome, awayMatchName) && sameTeam(rowAway, homeMatchName)));
+    const rowHomeId = normalizedId(row.home_team_id ?? row.homeTeamId);
+    const rowAwayId = normalizedId(row.away_team_id ?? row.awayTeamId);
+    const hasComparableIds = Boolean(homeTeamId && awayTeamId && rowHomeId && rowAwayId);
+    const directIdMatch = hasComparableIds && rowHomeId === homeTeamId && rowAwayId === awayTeamId;
+    const reversedIdMatch = hasComparableIds && rowHomeId === awayTeamId && rowAwayId === homeTeamId;
+    const directNameMatch = sameTeam(rowHome, homeMatchName) && sameTeam(rowAway, awayMatchName);
+    const reversedNameMatch = sameTeam(rowHome, awayMatchName) && sameTeam(rowAway, homeMatchName);
+    return Boolean(scoreFor(row) && (directIdMatch || reversedIdMatch || (!hasComparableIds && (directNameMatch || reversedNameMatch))));
   }).slice(0, 10).map((row): HeadToHeadMatch => ({ home: getTeamDisplayName(text(row.home_team)), away: getTeamDisplayName(text(row.away_team)), score: scoreFor(row)?.value ?? "-", date: text(row.match_time).slice(0, 10) }));
   let apiH2H: HeadToHeadMatch[] = [];
   if (!databaseH2H.length) {
