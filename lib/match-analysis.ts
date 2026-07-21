@@ -205,10 +205,22 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
   const relatedRows = rows.filter((row) => text(row.external_id) !== text(currentRow.external_id) && dateValue(row) <= currentTime);
   let historyRows: DatabaseMatchRow[] = [];
   if (supabase) {
+    console.log("[match-analysis] football_match_history query start", {
+      externalId,
+      teamId: {
+        home: currentRow.home_team_id,
+        away: currentRow.away_team_id,
+      },
+    });
     try {
       const historyResult = await supabase.from("football_match_history").select("*").order("match_time", { ascending: false }).limit(1000);
+      console.log("[match-analysis] football_match_history query result", {
+        data: historyResult.data,
+        error: historyResult.error,
+      });
       if (!historyResult.error && Array.isArray(historyResult.data)) historyRows = historyResult.data as DatabaseMatchRow[];
-    } catch {
+    } catch (error) {
+      console.log("[match-analysis] football_match_history query error", error);
       historyRows = [];
     }
   }
@@ -256,6 +268,11 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
   const homeRecent = homeDatabaseForm.length ? homeDatabaseForm : homeApiForm.length ? homeApiForm : [];
   const awayRecent = awayDatabaseForm.length ? awayDatabaseForm : awayApiForm.length ? awayApiForm : [];
   const recent = { home: summarize(homeRecent), away: summarize(awayRecent) };
+  console.log("[match-analysis] recent lengths", {
+    externalId,
+    recentHomeLength: recent.home.matches.length,
+    recentAwayLength: recent.away.matches.length,
+  });
 
   const databaseH2H = historicalRows.filter((row) => {
     const rowHome = text(row.home_team);
