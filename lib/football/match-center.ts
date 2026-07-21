@@ -1,4 +1,5 @@
 import { predictMatch } from "@/lib/ai/predictor";
+import { getDynamicMatchPrediction } from "@/lib/football/dynamic-prediction";
 import type { FootballMatch } from "@/lib/football/types";
 
 export type MatchCenterRow = {
@@ -41,6 +42,31 @@ export function footballMatchToMatchCenterRow(match: FootballMatch): MatchCenter
   };
 }
 
+export async function footballMatchToDynamicMatchCenterRow(match: FootballMatch): Promise<MatchCenterRow> {
+  const prediction = await getDynamicMatchPrediction(match);
+  return {
+    external_id: match.id,
+    home_team_id: match.homeTeam.id,
+    away_team_id: match.awayTeam.id,
+    league: match.league,
+    home_team: match.homeTeam.name,
+    away_team: match.awayTeam.name,
+    match_time: match.date,
+    home_logo: match.homeTeam.logo ?? null,
+    away_logo: match.awayTeam.logo ?? null,
+    home_win: prediction?.homeWin ?? null,
+    draw: prediction?.draw ?? null,
+    away_win: prediction?.awayWin ?? null,
+    ai_score: prediction?.confidence ?? null,
+    ai_pick: prediction?.recommendation ?? null,
+    risk_level: prediction?.risk ?? null,
+  };
+}
+
 export function footballMatchesToMatchCenterRows(matches: FootballMatch[]) {
   return matches.map(footballMatchToMatchCenterRow);
+}
+
+export async function footballMatchesToDynamicMatchCenterRows(matches: FootballMatch[]) {
+  return Promise.all(matches.map(footballMatchToDynamicMatchCenterRow));
 }

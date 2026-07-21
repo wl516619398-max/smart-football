@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getUpcomingFixtures } from "@/lib/football/fixture-service";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { predictMatch } from "@/lib/ai/predictor";
+import { getDynamicMatchPrediction } from "@/lib/football/dynamic-prediction";
 
 function isAuthorized(request: Request) {
   const secret = process.env.MATCH_SYNC_SECRET;
@@ -17,27 +17,25 @@ export async function POST(request: Request) {
 
   try {
     const fixtures = await getUpcomingFixtures();
-    const rows = fixtures.map((fixture) => ({
-      ...(() => {
-        const prediction = predictMatch(fixture);
-        return {
-          home_win: prediction.homeWin,
-          draw: prediction.draw,
-          away_win: prediction.awayWin,
-          ai_score: prediction.confidence,
-          ai_pick: prediction.recommendation,
-          risk_level: prediction.risk,
-        };
-      })(),
-      external_id: fixture.id,
-      league: fixture.league,
-      home_team: fixture.homeTeam.name,
-      away_team: fixture.awayTeam.name,
-      home_team_id: fixture.homeTeam.id,
-      away_team_id: fixture.awayTeam.id,
-      match_time: fixture.date,
-      home_logo: fixture.homeTeam.logo ?? null,
-      away_logo: fixture.awayTeam.logo ?? null,
+    const rows = await Promise.all(fixtures.map(async (fixture) => {
+      const prediction = await getDynamicMatchPrediction(fixture);
+      return {
+        home_win: prediction?.homeWin ?? null,
+        draw: prediction?.draw ?? null,
+        away_win: prediction?.awayWin ?? null,
+        ai_score: prediction?.confidence ?? null,
+        ai_pick: prediction?.recommendation ?? null,
+        risk_level: prediction?.risk ?? null,
+        external_id: fixture.id,
+        league: fixture.league,
+        home_team: fixture.homeTeam.name,
+        away_team: fixture.awayTeam.name,
+        home_team_id: fixture.homeTeam.id,
+        away_team_id: fixture.awayTeam.id,
+        match_time: fixture.date,
+        home_logo: fixture.homeTeam.logo ?? null,
+        away_logo: fixture.awayTeam.logo ?? null,
+      };
     }));
 
     if (!rows.length) return NextResponse.json({ success: true, fetched: 0, insertedOrUpdated: 0 });

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { MatchesBrowser, type MatchesResponse, type SyncedMatch } from "@/components/matches/MatchesBrowser";
 import { getUpcomingFixturesWithSource } from "@/lib/football/fixture-service";
-import { footballMatchesToMatchCenterRows } from "@/lib/football/match-center";
+import { footballMatchesToDynamicMatchCenterRows } from "@/lib/football/match-center";
 import { getUpcomingDateWindow, isTodayOrFuture } from "@/lib/football/date-window";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 async function getInitialMatches(): Promise<MatchesResponse> {
   const emptyResult: MatchesResponse = { success: false, data: [], total: 0, page: 1, pageSize: 20, totalPages: 0 };
   const liveResult = await getUpcomingFixturesWithSource();
-  const liveRows = footballMatchesToMatchCenterRows(liveResult.matches).filter((row) => isTodayOrFuture(row.match_time));
+  const liveRows = (await footballMatchesToDynamicMatchCenterRows(liveResult.matches)).filter((row) => isTodayOrFuture(row.match_time));
   if (liveResult.source === "football-api" && liveRows.length) {
     return { success: true, data: liveRows.slice(0, 20), total: liveRows.length, page: 1, pageSize: 20, totalPages: Math.ceil(liveRows.length / 20) };
   }

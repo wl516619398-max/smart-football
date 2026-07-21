@@ -32,13 +32,13 @@ export type FeaturedMatch = {
   time: string;
   homeTeam: MatchTeam;
   awayTeam: MatchTeam;
-  aiScore: number;
+  aiScore: number | null;
   prediction: string;
   score: string;
   risk: MatchRisk;
-  homeWin: number;
-  draw: number;
-  awayWin: number;
+  homeWin: number | null;
+  draw: number | null;
+  awayWin: number | null;
 };
 
 export type CommercialTeamStats = {

@@ -52,6 +52,8 @@ type MatchRow = {
   ai_score: number | null;
   ai_pick?: string | null;
   ai_analysis?: string | null;
+  home_team_id?: string | number | null;
+  away_team_id?: string | number | null;
 };
 
 async function getMatchByExternalId(externalId: string): Promise<MatchRow | null> {
@@ -172,6 +174,15 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
   const analysisHomeTeam = match.home_team || "涓婚槦";
   const analysisAwayTeam = match.away_team || "瀹㈤槦";
   const analysisData = await getMatchAnalysisData(externalId, match);
+  console.info("[match-detail] analysis response fields", {
+    externalId,
+    recentHomeKeys: Object.keys(analysisData.recent.home),
+    recentAwayKeys: Object.keys(analysisData.recent.away),
+    recentHomeMatches: analysisData.recent.home.matches.length,
+    recentAwayMatches: analysisData.recent.away.matches.length,
+    headToHeadKeys: Object.keys(analysisData.headToHead),
+    headToHeadMatches: analysisData.headToHead.matches.length,
+  });
   const [engineContext, fixtureOdds, storedAiAnalysis] = await Promise.all([
     getEnginePrediction(),
     getFixtureOdds(externalId),

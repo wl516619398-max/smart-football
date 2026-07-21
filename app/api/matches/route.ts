@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getUpcomingFixturesWithSource } from "@/lib/football/fixture-service";
-import { footballMatchesToMatchCenterRows, type MatchCenterRow } from "@/lib/football/match-center";
+import { footballMatchesToDynamicMatchCenterRows, type MatchCenterRow } from "@/lib/football/match-center";
 import { getUpcomingDateWindow, isTodayOrFuture, toShanghaiDateKey } from "@/lib/football/date-window";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -32,7 +32,7 @@ function filterAndPageFallback(rows: MatchCenterRow[], url: URL, page: number, p
 async function getFootballApiFallback(url: URL, page: number, pageSize: number) {
   try {
     const result = await getUpcomingFixturesWithSource();
-    return { ...filterAndPageFallback(footballMatchesToMatchCenterRows(result.matches), url, page, pageSize), source: result.source };
+    return { ...filterAndPageFallback(await footballMatchesToDynamicMatchCenterRows(result.matches), url, page, pageSize), source: result.source };
   } catch (error) {
     console.error("Failed to load football API fallback:", error);
     return { success: false, data: [], total: 0, page, pageSize, totalPages: 0, source: "football-api" };
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
   const search = url.searchParams.get("search")?.trim() ?? "";
 
   const liveResult = await getUpcomingFixturesWithSource();
-  const liveResponse = filterAndPageFallback(footballMatchesToMatchCenterRows(liveResult.matches), url, page, pageSize);
+  const liveResponse = filterAndPageFallback(await footballMatchesToDynamicMatchCenterRows(liveResult.matches), url, page, pageSize);
   if (liveResult.source === "football-api") return NextResponse.json({ ...liveResponse, source: "football-api" });
 
   if (!supabase) return NextResponse.json({ ...liveResponse, source: "mock" });

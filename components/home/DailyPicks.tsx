@@ -4,7 +4,7 @@ import { getFixtureOdds } from "@/lib/football/odds";
 import { getUpcomingDateWindow } from "@/lib/football/date-window";
 import { formatMatchDateTime } from "@/lib/football/date-format";
 import { getTeamDisplayName } from "@/lib/football/team-name-map";
-import { footballMatchesToMatchCenterRows } from "@/lib/football/match-center";
+import { footballMatchesToDynamicMatchCenterRows } from "@/lib/football/match-center";
 import { getUpcomingFixturesWithSource } from "@/lib/football/fixture-service";
 import { calculateOddsValue } from "@/lib/odds/value-engine";
 import { predictMatch } from "@/lib/prediction/engine";
@@ -33,10 +33,7 @@ function valueTone(value: number) { return value >= 0.05 ? "border-emerald-500/2
 
 function toPickInput(match: SyncedHomeMatch | FeaturedMatch) {
   if ("external_id" in match) {
-    const homeWin = match.home_win ?? 40;
-    const draw = match.draw ?? 27;
-    const awayWin = match.away_win ?? Math.max(0, 100 - homeWin - draw);
-    return { id: match.external_id, league: match.league, homeTeam: getTeamDisplayName(match.home_team), awayTeam: getTeamDisplayName(match.away_team), matchTime: match.match_time, homeWin, draw, awayWin, confidence: match.ai_score ?? Math.max(homeWin, draw, awayWin) };
+    return { id: match.external_id, league: match.league, homeTeam: getTeamDisplayName(match.home_team), awayTeam: getTeamDisplayName(match.away_team), matchTime: match.match_time, homeWin: match.home_win, draw: match.draw, awayWin: match.away_win, confidence: match.ai_score };
   }
   return { id: match.id, league: match.league, homeTeam: getTeamDisplayName(match.homeTeam.name), awayTeam: getTeamDisplayName(match.awayTeam.name), matchTime: `${match.date}T${match.time}:00+08:00`, homeWin: match.homeWin, draw: match.draw, awayWin: match.awayWin, confidence: match.aiScore };
 }
@@ -44,7 +41,7 @@ function toPickInput(match: SyncedHomeMatch | FeaturedMatch) {
 async function getDailyPicksMatches(): Promise<HomeMatchesResult> {
   try {
     const liveResult = await getUpcomingFixturesWithSource();
-    if (liveResult.source === "football-api" && liveResult.matches.length) return { matches: footballMatchesToMatchCenterRows(liveResult.matches) as SyncedHomeMatch[], useFallback: false };
+    if (liveResult.source === "football-api" && liveResult.matches.length) return { matches: await footballMatchesToDynamicMatchCenterRows(liveResult.matches) as SyncedHomeMatch[], useFallback: false };
   } catch { /* Continue to database and local fallback. */ }
   const supabase = getSupabaseServerClient();
   if (supabase) {
@@ -59,6 +56,7 @@ async function getDailyPicksMatches(): Promise<HomeMatchesResult> {
 
 async function buildDailyPick(match: SyncedHomeMatch | FeaturedMatch, history: Awaited<ReturnType<typeof getPredictionHistory>>) {
   const input = toPickInput(match);
+  if (input.homeWin === null || input.draw === null || input.awayWin === null || input.confidence === null) return null;
   const prediction = predictMatch(statsFromProbabilities(input.homeWin, input.awayWin, input.confidence, true), statsFromProbabilities(input.homeWin, input.awayWin, input.confidence, false));
   const odds = await getFixtureOdds(input.id);
   const oddsValue = calculateOddsValue({ prediction, odds: { home: odds.home.odds, draw: odds.draw.odds, away: odds.away.odds } });
@@ -77,7 +75,7 @@ export async function DailyPicks({ matchesPromise, fallbackMatches = featured.sl
   const sourceResult = matchesPromise ? await matchesPromise : await getDailyPicksMatches();
   const [{ matches, useFallback }, history] = await Promise.all([Promise.resolve(sourceResult), getPredictionHistory()]);
   const source = matches.length ? matches.slice(0, 6) : fallbackMatches.slice(0, 6);
-  const allPicks = (await Promise.all(source.map((match) => buildDailyPick(match, history)))).sort((a, b) => b.value - a.value || b.confidence - a.confidence);
+  const allPicks = (await Promise.all(source.map((match) => buildDailyPick(match, history)))).filter((pick): pick is DailyPick => Boolean(pick)).sort((a, b) => b.value - a.value || b.confidence - a.confidence);
   const picks = allPicks.slice(0, 3);
   const accuracy = summarizePredictionHistory(history);
   const valueOpportunities = allPicks.filter((pick) => pick.value >= 0.05).length;

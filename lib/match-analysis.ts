@@ -9,7 +9,9 @@ type DatabaseMatchRow = Record<string, unknown>;
 const clamp = (value: number, min = 0, max = 100) => Math.min(max, Math.max(min, Math.round(value)));
 
 function text(value: unknown) {
-  return typeof value === "string" ? value : "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return "";
 }
 
 const TEAM_IDENTITIES: Record<string, string> = {
@@ -38,7 +40,10 @@ function sameTeam(left: string, right: string) {
     const value = name.trim().toLocaleLowerCase();
     return TEAM_IDENTITIES[value] ?? value;
   };
-  return normalize(left) === normalize(right);
+  const leftIdentity = normalize(left);
+  const rightIdentity = normalize(right);
+  if (leftIdentity === rightIdentity) return true;
+  return getTeamDisplayName(left).toLocaleLowerCase() === getTeamDisplayName(right).toLocaleLowerCase();
 }
 
 function number(value: unknown) {
@@ -68,7 +73,10 @@ function normalizedId(value: unknown) {
 
 function teamMatches(row: DatabaseMatchRow, side: "home" | "away", team: string, teamId?: string) {
   const rowTeamId = normalizedId(row[`${side}_team_id`] ?? row[`${side}TeamId`]);
-  if (teamId && rowTeamId) return rowTeamId === teamId;
+  if (teamId && rowTeamId && rowTeamId === teamId) return true;
+  // Some older rows were synced from a different provider with the same
+  // teams but different numeric IDs. IDs are preferred; names are a legacy
+  // compatibility fallback and never use the current match external_id.
   return sameTeam(text(row[`${side}_team`] ?? row[`${side}Team`]), team);
 }
 
@@ -204,7 +212,7 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
       historyRows = [];
     }
   }
-  const historicalRows = [...historyRows, ...relatedRows];
+  const historicalRows = [...historyRows, ...relatedRows].sort((left, right) => dateValue(right) - dateValue(left));
   // Match against raw provider names. The display layer may translate a team
   // name, while football_match_history keeps the provider's original name.
   const homeMatchName = homeLookupTeam || homeTeam;
@@ -259,7 +267,7 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
     const reversedIdMatch = hasComparableIds && rowHomeId === awayTeamId && rowAwayId === homeTeamId;
     const directNameMatch = sameTeam(rowHome, homeMatchName) && sameTeam(rowAway, awayMatchName);
     const reversedNameMatch = sameTeam(rowHome, awayMatchName) && sameTeam(rowAway, homeMatchName);
-    return Boolean(scoreFor(row) && (directIdMatch || reversedIdMatch || (!hasComparableIds && (directNameMatch || reversedNameMatch))));
+    return Boolean(scoreFor(row) && (directIdMatch || reversedIdMatch || directNameMatch || reversedNameMatch));
   }).slice(0, 10).map((row): HeadToHeadMatch => ({ home: getTeamDisplayName(text(row.home_team)), away: getTeamDisplayName(text(row.away_team)), score: scoreFor(row)?.value ?? "-", date: text(row.match_time).slice(0, 10) }));
   let apiH2H: HeadToHeadMatch[] = [];
   if (!databaseH2H.length) {
@@ -295,5 +303,14 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
   const aiScore = number(currentRow.ai_score) ?? fallback?.prediction.confidence ?? 70;
   const metrics = createMetrics(currentRow, fallback, homeWin, awayWin, aiScore);
   const headToHead = { matches: h2hMatches, ...h2hSummary, latestScore: h2hMatches[0]?.score ?? "暂无数据" };
+  console.info("[match-analysis] mapped fields", {
+    externalId,
+    current: { homeTeamId, awayTeamId, homeTeam: homeMatchName, awayTeam: awayMatchName },
+    recent: {
+      home: { count: recent.home.matches.length, wins: recent.home.wins, draws: recent.home.draws, losses: recent.home.losses, goalsFor: recent.home.goalsFor, goalsAgainst: recent.home.goalsAgainst, fields: Object.keys(recent.home) },
+      away: { count: recent.away.matches.length, wins: recent.away.wins, draws: recent.away.draws, losses: recent.away.losses, goalsFor: recent.away.goalsFor, goalsAgainst: recent.away.goalsAgainst, fields: Object.keys(recent.away) },
+    },
+    headToHead: { count: headToHead.matches.length, homeWins: headToHead.homeWins, draws: headToHead.draws, awayWins: headToHead.awayWins, fields: Object.keys(headToHead) },
+  });
   return { recent, headToHead, metrics, focusFactors: createFocusFactors(currentRow, fallback, recent, headToHead, aiScore) };
 }

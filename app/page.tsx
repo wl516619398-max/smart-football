@@ -6,7 +6,7 @@ import { ArrowRight, CalendarDays, ShieldCheck } from "lucide-react";
 import { featured } from "@/data/matches";
 import { fallbackHomeLeagues, fallbackHomeStats, latestInsights, type HomeLeagueSummary, type HomeOverviewStats } from "@/data/home";
 import { players } from "@/data/mock-data";
-import { predictMatch } from "@/lib/ai/predictor";
+import { getDynamicMatchPrediction } from "@/lib/football/dynamic-prediction";
 import { getFootballDataProvider } from "@/lib/football/data-provider";
 import { getUpcomingFixturesWithSource } from "@/lib/football/fixture-service";
 import { getUpcomingDateWindow, isTodayOrFuture } from "@/lib/football/date-window";
@@ -30,8 +30,8 @@ export const metadata: Metadata = {
   description: "足球数据分析与赛事信息平台，提供赛事概率模型、球员分析、xG数据与市场数据变化观察。",
 };
 
-function toSyncedHomeMatch(match: FootballMatch): SyncedHomeMatch {
-  const prediction = predictMatch(match);
+async function toSyncedHomeMatch(match: FootballMatch): Promise<SyncedHomeMatch> {
+  const prediction = await getDynamicMatchPrediction(match);
   return {
     external_id: match.id,
     home_team_id: match.homeTeam.id,
@@ -42,12 +42,12 @@ function toSyncedHomeMatch(match: FootballMatch): SyncedHomeMatch {
     match_time: match.date,
     home_logo: match.homeTeam.logo ?? null,
     away_logo: match.awayTeam.logo ?? null,
-    home_win: prediction.homeWin,
-    draw: prediction.draw,
-    away_win: prediction.awayWin,
-    ai_score: prediction.confidence,
-    ai_pick: prediction.recommendation,
-    risk_level: prediction.risk,
+    home_win: prediction?.homeWin ?? null,
+    draw: prediction?.draw ?? null,
+    away_win: prediction?.awayWin ?? null,
+    ai_score: prediction?.confidence ?? null,
+    ai_pick: prediction?.recommendation ?? null,
+    risk_level: prediction?.risk ?? null,
   };
 }
 
@@ -56,7 +56,7 @@ async function getHomeMatches(): Promise<HomeMatchesResult> {
     const liveResult = await getUpcomingFixturesWithSource();
     const liveMatches = liveResult.matches.filter((match) => isTodayOrFuture(match.date));
     if (liveResult.source === "football-api" && liveMatches.length) {
-      return { matches: liveMatches.slice(0, 3).map(toSyncedHomeMatch), useFallback: false };
+      return { matches: await Promise.all(liveMatches.slice(0, 3).map(toSyncedHomeMatch)), useFallback: false };
     }
   } catch {
     // Continue to database and provider fallbacks.
@@ -87,7 +87,7 @@ async function getHomeMatches(): Promise<HomeMatchesResult> {
     const upcomingMatches = providerMatches.filter((match) => isTodayOrFuture(match.date));
     if (provider.kind === "api" && upcomingMatches.length) {
       return {
-        matches: upcomingMatches.slice(0, 3).map(toSyncedHomeMatch),
+        matches: await Promise.all(upcomingMatches.slice(0, 3).map(toSyncedHomeMatch)),
         useFallback: false,
       };
     }

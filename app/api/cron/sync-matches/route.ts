@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { predictMatch } from "@/lib/ai/predictor";
 import { getFootballDataProvider } from "@/lib/football/data-provider";
+import { getDynamicMatchPrediction } from "@/lib/football/dynamic-prediction";
 import type { FootballMatch, FootballStanding } from "@/lib/football/types";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -40,8 +40,8 @@ function getShanghaiDateKey(value: string) {
   }).format(date);
 }
 
-function toMatchRow(match: FootballMatch) {
-  const prediction = predictMatch(match);
+async function toMatchRow(match: FootballMatch) {
+  const prediction = await getDynamicMatchPrediction(match);
 
   return {
     external_id: match.id,
@@ -51,10 +51,10 @@ function toMatchRow(match: FootballMatch) {
     home_team_id: match.homeTeam.id,
     away_team_id: match.awayTeam.id,
     match_time: match.date,
-    home_win: prediction.homeWin,
-    draw: prediction.draw,
-    away_win: prediction.awayWin,
-    ai_score: prediction.confidence,
+    home_win: prediction?.homeWin ?? null,
+    draw: prediction?.draw ?? null,
+    away_win: prediction?.awayWin ?? null,
+    ai_score: prediction?.confidence ?? null,
   };
 }
 
@@ -117,7 +117,7 @@ async function syncMatches(request: Request) {
     const query = getSyncWindow();
     const { matches, provider, usedMockFallback } = await getMatchesWithFallback(query);
     const rows = Array.from(
-      new Map(matches.map((match) => [match.id, toMatchRow(match)])).values(),
+      new Map((await Promise.all(matches.map(toMatchRow))).map((row) => [row.external_id, row])).values(),
     );
 
     let standings: FootballStanding[] = [];

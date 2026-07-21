@@ -24,10 +24,7 @@ export type SyncedHomeMatch = {
   risk_level?: string | null;
 };
 
-export type HomeMatchesResult = {
-  matches: SyncedHomeMatch[];
-  useFallback: boolean;
-};
+export type HomeMatchesResult = { matches: SyncedHomeMatch[]; useFallback: boolean };
 
 type HomeMatchData = {
   id: string;
@@ -37,15 +34,16 @@ type HomeMatchData = {
   date: string;
   time: string;
   scorePrediction: string;
-  homeProbability: number;
-  drawProbability: number;
-  awayProbability: number;
-  aiConfidence: number;
+  homeProbability: number | null;
+  drawProbability: number | null;
+  awayProbability: number | null;
+  aiConfidence: number | null;
   recommendation: string;
   risk: MatchRisk;
 };
 
 const teamColors = ["#2563EB", "#22C55E", "#A855F7", "#F59E0B"];
+const unavailable = "\u6570\u636e\u540c\u6b65\u4e2d";
 
 function toTeam(name: string, index: number, id?: string | null): MatchTeam {
   const displayName = getTeamDisplayName(name);
@@ -54,13 +52,6 @@ function toTeam(name: string, index: number, id?: string | null): MatchTeam {
 
 function toHomeMatchData(match: SyncedHomeMatch, index: number): HomeMatchData {
   const formattedDate = formatMatchDateTime(match.match_time);
-  const homeProbability = match.home_win ?? 40;
-  const drawProbability = match.draw ?? 27;
-  const awayProbability = match.away_win ?? Math.max(0, 100 - homeProbability - drawProbability);
-  const recommendation = match.ai_pick || (homeProbability >= awayProbability ? "主胜" : "客胜");
-  const risk = (match.risk_level || (Math.max(homeProbability, awayProbability) >= 47 ? "低" : "中")) as MatchRisk;
-  const scorePrediction = recommendation === "客胜" ? "1:2" : recommendation === "平局" ? "1:1" : "2:1";
-
   return {
     id: match.external_id,
     homeTeam: toTeam(match.home_team, index, match.home_team_id),
@@ -68,13 +59,13 @@ function toHomeMatchData(match: SyncedHomeMatch, index: number): HomeMatchData {
     league: match.league,
     date: formattedDate.date,
     time: formattedDate.time,
-    scorePrediction,
-    homeProbability,
-    drawProbability,
-    awayProbability,
-    aiConfidence: match.ai_score ?? Math.max(homeProbability, drawProbability, awayProbability),
-    recommendation,
-    risk,
+    scorePrediction: unavailable,
+    homeProbability: match.home_win,
+    drawProbability: match.draw,
+    awayProbability: match.away_win,
+    aiConfidence: match.ai_score,
+    recommendation: match.ai_pick || unavailable,
+    risk: (match.risk_level || "\u4e2d") as MatchRisk,
   };
 }
 
@@ -91,5 +82,5 @@ export async function LiveHomeMatches({ matchesPromise, fallbackMatches }: { mat
   const matches = apiMatches.length ? apiMatches.slice(0, 3).map(toHomeMatchData).map(toFeaturedMatch) : fallbackMatches.slice(0, 3);
   const highlight = matches[0] ?? fallbackMatches[0];
 
-  return <><HeroAI match={highlight} /><section className="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8"><div className="mb-5 flex items-end justify-between"><div><div className="flex items-center gap-2 text-xs font-medium text-blue-400"><CircleDot className="h-3.5 w-3.5" />TODAY&apos;S FOCUS</div><h2 className="mt-2 text-2xl font-semibold text-white">焦点比赛</h2><p className="mt-1 text-sm text-slate-500">AI 已为你筛选今天最值得分析的对决</p>{useFallback && <p className="mt-1 text-[11px] text-amber-400/80">实时数据暂不可用，当前显示 Mock 数据</p>}</div><Link href="/matches" className="hidden items-center gap-1 text-sm text-blue-400 hover:text-blue-300 sm:flex">全部比赛 <ChevronRight className="h-4 w-4" /></Link></div><div className="grid gap-5 lg:grid-cols-3">{matches.map((match) => <MatchCard key={match.id} match={match} />)}</div><Link href="/matches" className="mt-4 flex items-center justify-center gap-1 text-sm text-blue-400 sm:hidden">查看全部比赛 <ChevronRight className="h-4 w-4" /></Link></section></>;
+  return <><HeroAI match={highlight} /><section className="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8"><div className="mb-5 flex items-end justify-between"><div><div className="flex items-center gap-2 text-xs font-medium text-blue-400"><CircleDot className="h-3.5 w-3.5" />TODAY&apos;S FOCUS</div><h2 className="mt-2 text-2xl font-semibold text-white">\u7126\u70b9\u6bd4\u8d5b</h2><p className="mt-1 text-sm text-slate-500">AI \u5df2\u4e3a\u4f60\u7b5b\u9009\u4eca\u5929\u6700\u503c\u5f97\u5206\u6790\u7684\u5bf9\u51b3</p>{useFallback && <p className="mt-1 text-[11px] text-amber-400/80">\u5b9e\u65f6\u6570\u636e\u6682\u4e0d\u53ef\u7528\uff0c\u5f53\u524d\u4f7f\u7528 Mock \u6570\u636e</p>}</div><Link href="/matches" className="hidden items-center gap-1 text-sm text-blue-400 hover:text-blue-300 sm:flex">\u5168\u90e8\u6bd4\u8d5b <ChevronRight className="h-4 w-4" /></Link></div><div className="grid gap-5 lg:grid-cols-3">{matches.map((match) => <MatchCard key={match.id} match={match} />)}</div><Link href="/matches" className="mt-4 flex items-center justify-center gap-1 text-sm text-blue-400 sm:hidden">\u67e5\u770b\u5168\u90e8\u6bd4\u8d5b <ChevronRight className="h-4 w-4" /></Link></section></>;
 }
