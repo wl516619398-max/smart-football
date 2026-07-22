@@ -2,6 +2,7 @@ import { requestFootballApi } from "@/lib/football/api-client";
 import type { ApiFootballTeamStatistics, FootballTeamStats } from "@/lib/football/types";
 import { getFootballTeamStatsFallback } from "@/data/matches";
 import { getFootballSeasonCandidates } from "@/lib/football/season";
+import { resolveFootballTeamId, type FootballTeamReference } from "@/lib/football/team-id";
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
@@ -35,11 +36,16 @@ function normalizeTeamStats(stats: ApiFootballTeamStatistics): FootballTeamStats
   };
 }
 
-export async function getTeamStats(teamId: string): Promise<FootballTeamStats> {
+export async function getTeamStats(team: FootballTeamReference): Promise<FootballTeamStats> {
+  const fallbackTeamId = typeof team === "string"
+    ? team.trim()
+    : String(team.football_data_id || team.api_football_id || team.thesportsdb_id || team.id || "").trim();
+  const teamId = await resolveFootballTeamId(team);
+  if (!teamId) return getFootballTeamStatsFallback(fallbackTeamId);
   const league = process.env.FOOTBALL_LEAGUE_ID || "39";
   for (const season of getFootballSeasonCandidates()) {
     const remoteStats = await requestFootballApi<ApiFootballTeamStatistics>("teams/statistics", { team: teamId, league, season });
     if (remoteStats) return normalizeTeamStats(remoteStats);
   }
-  return getFootballTeamStatsFallback(teamId);
+  return getFootballTeamStatsFallback(fallbackTeamId || teamId);
 }

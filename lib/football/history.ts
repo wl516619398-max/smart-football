@@ -1,6 +1,9 @@
 import { footballApiRawRequest } from "@/lib/football/api";
 import { getFootballSeasonCandidates } from "@/lib/football/season";
+import { resolveFootballTeamId as resolveApiFootballTeamId, type FootballTeamReference } from "@/lib/football/team-id";
 import type { ApiFootballFixture } from "@/lib/football/types";
+
+export type { FootballTeamReference } from "@/lib/football/team-id";
 
 export type FootballHistoryProvider = "football-data" | "api-football" | "thesportsdb";
 
@@ -126,14 +129,6 @@ async function getApiFootballHeadToHead(homeTeamId: string, awayTeamId: string) 
     .slice(0, 10);
 }
 
-async function apiFootballSearchTeam(name: string) {
-  const payload = await footballApiRawRequest<Array<{ team?: { id?: number; name?: string } }>>("teams", { search: name });
-  if (!payload || isApiFootballError(payload)) return null;
-  const normalized = name.toLocaleLowerCase();
-  const found = (payload.response || []).find((item) => item.team?.name?.toLocaleLowerCase() === normalized) || payload.response?.[0];
-  return found?.team?.id ? String(found.team.id) : null;
-}
-
 function sportsDbBase() {
   const key = process.env.THESPORTSDB_API_KEY?.trim() || "3";
   return `https://www.thesportsdb.com/api/v1/json/${encodeURIComponent(key)}`;
@@ -232,31 +227,36 @@ async function footballDataSearchTeam(name: string) {
   return stringValue(record(arrayValue(payload?.teams)[0])?.id) || null;
 }
 
-export async function resolveFootballTeamId(name: string, knownId?: string | null) {
-  const provider = providerFromEnv();
-  if (provider === "api-football") {
-    const normalizedName = name.trim().toLocaleLowerCase();
-    if (/^\d+$/.test(knownId?.trim() || "")) return knownId!.trim();
-    if (API_FOOTBALL_TEAM_ALIASES[normalizedName]) return API_FOOTBALL_TEAM_ALIASES[normalizedName];
-    return apiFootballSearchTeam(name);
-  }
-  if (knownId?.trim()) return knownId.trim();
-  if (provider === "thesportsdb") return sportsDbSearchTeam(name);
-  if (provider === "football-data") return footballDataSearchTeam(name);
-  return null;
+export async function resolveFootballTeamId(team: FootballTeamReference, knownId?: string | null) {
+  return resolveApiFootballTeamId(team, knownId);
 }
 
-export async function getHistoricalTeamMatches(teamId: string) {
+export async function getHistoricalTeamMatches(team: FootballTeamReference) {
   const provider = providerFromEnv();
   if (!provider) return [];
-  if (provider === "api-football") return getApiFootballTeamHistory(teamId);
-  if (provider === "thesportsdb") return getSportsDbTeamHistory(teamId);
-  return footballDataHistory(teamId);
+  if (provider === "api-football") {
+    const apiFootballId = await resolveApiFootballTeamId(team);
+    return apiFootballId ? getApiFootballTeamHistory(apiFootballId) : [];
+  }
+  const rawId = typeof team === "string" ? team.trim() : String(team.thesportsdb_id || team.id || "").trim();
+  if (!rawId) return [];
+  if (provider === "thesportsdb") return getSportsDbTeamHistory(rawId);
+  return footballDataHistory(rawId);
 }
 
-export async function getHistoricalHeadToHead(homeTeamId: string, awayTeamId: string) {
+export async function getHistoricalHeadToHead(homeTeam: FootballTeamReference, awayTeam: FootballTeamReference) {
   const provider = providerFromEnv();
-  if (provider === "api-football") return getApiFootballHeadToHead(homeTeamId, awayTeamId);
+  if (provider === "api-football") {
+    const [homeTeamId, awayTeamId] = await Promise.all([
+      resolveApiFootballTeamId(homeTeam),
+      resolveApiFootballTeamId(awayTeam),
+    ]);
+    if (!homeTeamId || !awayTeamId) return [];
+    return getApiFootballHeadToHead(homeTeamId, awayTeamId);
+  }
+  const homeTeamId = typeof homeTeam === "string" ? homeTeam.trim() : String(homeTeam.thesportsdb_id || homeTeam.id || "").trim();
+  const awayTeamId = typeof awayTeam === "string" ? awayTeam.trim() : String(awayTeam.thesportsdb_id || awayTeam.id || "").trim();
+  if (!homeTeamId || !awayTeamId) return [];
   if (provider === "thesportsdb") return getSportsDbHeadToHead(homeTeamId, awayTeamId);
   return [];
 }

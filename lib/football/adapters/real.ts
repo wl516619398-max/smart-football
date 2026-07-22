@@ -1,5 +1,6 @@
 import { createMockFootballAdapter } from "@/lib/football/adapters/mock";
 import { getFootballSeasonCandidates } from "@/lib/football/season";
+import { resolveFootballTeamId } from "@/lib/football/team-id";
 import type { FootballApiAdapter } from "@/lib/football/adapters/types";
 import type { FootballDataQuery } from "@/lib/football/data-provider";
 import type {
@@ -284,13 +285,17 @@ function createApiFootballSource(): RealFootballSource | null {
     },
     async getTeamInfo(teamId) {
       if (!teamId) return null;
-      const response = await request("teams", { id: teamId });
-      const team = apiFootballTeam(readRecord(asRecord(response?.[0]), "team"), teamId);
+      const apiFootballTeamId = await resolveFootballTeamId(teamId);
+      if (!apiFootballTeamId) return null;
+      const response = await request("teams", { id: apiFootballTeamId });
+      const team = apiFootballTeam(readRecord(asRecord(response?.[0]), "team"), apiFootballTeamId);
       return team.name === "待确认" ? null : [team];
     },
     async getTeamForm(teamId) {
+      const apiFootballTeamId = await resolveFootballTeamId(teamId);
+      if (!apiFootballTeamId) return null;
       for (const season of getSeasonCandidates()) {
-        const response = await request("fixtures", { team: teamId, season });
+        const response = await request("fixtures", { team: apiFootballTeamId, season });
         const matches = (response || [])
           .sort((left, right) => {
             const leftDate = readString(readRecord(asRecord(left), "fixture"), "date");
@@ -298,8 +303,8 @@ function createApiFootballSource(): RealFootballSource | null {
             return Date.parse(rightDate) - Date.parse(leftDate);
           })
           .slice(0, 10)
-          .map((item) => parseFormEvent(asRecord(item) || {}, teamId));
-        if (matches.length) return { teamId, matches };
+          .map((item) => parseFormEvent(asRecord(item) || {}, apiFootballTeamId));
+        if (matches.length) return { teamId: apiFootballTeamId, matches };
       }
       return null;
     },

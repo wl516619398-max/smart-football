@@ -1,6 +1,7 @@
 import { footballApiRawRequest } from "@/lib/football/api";
 import { getFootballDataProvider } from "@/lib/football/data-provider";
 import { getFootballSeasonCandidates } from "@/lib/football/season";
+import { resolveFootballTeamId, type FootballTeamReference } from "@/lib/football/team-id";
 import type { ApiFootballFixture, FootballRecentMatch } from "@/lib/football/types";
 
 export type TeamRecentStats = {
@@ -79,7 +80,9 @@ function parseApiFootballFixture(fixture: ApiFootballFixture, teamId: string): {
   };
 }
 
-async function getApiFootballRecentStats(teamId: string): Promise<TeamRecentStats | null> {
+async function getApiFootballRecentStats(team: FootballTeamReference): Promise<TeamRecentStats | null> {
+  const teamId = await resolveFootballTeamId(team);
+  if (!teamId) return null;
   for (const season of getSeasonCandidates()) {
     const rawResponse = await footballApiRawRequest<ApiFootballFixture[]>("fixtures", { team: teamId, season });
     console.info(`[Football stats] Football API raw response season=${season}:`, JSON.stringify(rawResponse, null, 2));
@@ -108,29 +111,37 @@ async function getApiFootballRecentStats(teamId: string): Promise<TeamRecentStat
   return null;
 }
 
-export async function getTeamRecentStats(teamId: string): Promise<TeamRecentStats> {
-  const normalizedTeamId = teamId.trim();
-  const apiStats = await getApiFootballRecentStats(normalizedTeamId);
+export async function getTeamRecentStats(team: FootballTeamReference): Promise<TeamRecentStats> {
+  const normalizedTeamId = typeof team === "string"
+    ? team.trim()
+    : String(team.football_data_id || team.api_football_id || team.thesportsdb_id || team.id || "").trim();
+  const apiStats = await getApiFootballRecentStats(team);
   if (apiStats) return apiStats;
 
   const provider = getFootballDataProvider();
+  const providerTeamId = normalizedTeamId;
   const [form, teams] = await Promise.all([
-    provider.getForm(normalizedTeamId, { teamId: normalizedTeamId }),
-    provider.getTeams({ teamId: normalizedTeamId }),
+    provider.getForm(providerTeamId, { teamId: providerTeamId }),
+    provider.getTeams({ teamId: providerTeamId }),
   ]);
   const summary = summarizeMatches(form.matches);
-  const team = teams.find((item) => item.id === normalizedTeamId) ?? teams[0];
+  const teamInfo = teams.find((item) => item.id === providerTeamId) ?? teams[0];
 
   return {
-    team: team?.name ?? normalizedTeamId,
+    team: teamInfo?.name ?? (typeof team === "string" ? team : team.name || normalizedTeamId),
     source: "fallback",
     recentMatches: form.matches.slice(0, 10),
     ...summary,
   };
 }
 
-export async function getTeamHeadToHeadMatches(homeTeamId: string, awayTeamId: string): Promise<TeamHeadToHeadMatch[]> {
-  const response = await footballApiRawRequest<ApiFootballFixture[]>("fixtures", { h2h: `${homeTeamId}-${awayTeamId}` });
+export async function getTeamHeadToHeadMatches(homeTeam: FootballTeamReference, awayTeam: FootballTeamReference): Promise<TeamHeadToHeadMatch[]> {
+  const [homeTeamId, awayTeamId] = await Promise.all([
+    resolveFootballTeamId(homeTeam),
+    resolveFootballTeamId(awayTeam),
+  ]);
+  if (!homeTeamId || !awayTeamId) return [];
+  const response = await footballApiRawRequest<ApiFootballFixture[]>("fixtures/headtohead", { h2h: `${homeTeamId}-${awayTeamId}` });
   const fixtures = Array.isArray(response?.response) ? response.response : [];
   return [...fixtures]
     .filter((fixture) => Number.isFinite(fixture.goals?.home) && Number.isFinite(fixture.goals?.away))
