@@ -1,7 +1,7 @@
-import { footballApiRawRequest, footballApiRequestUrl } from "@/lib/football/api";
-import { getFootballSeasonCandidates } from "@/lib/football/season";
-import { resolveFootballTeamId as resolveApiFootballTeamId, type FootballTeamReference } from "@/lib/football/team-id";
-import type { ApiFootballFixture } from "@/lib/football/types";
+import { footballApiRawRequest, footballApiRequestUrl } from "./api.ts";
+import { getFootballSeasonCandidates } from "./season.ts";
+import { resolveFootballTeamId as resolveApiFootballTeamId, type FootballTeamReference } from "./team-id.ts";
+import type { ApiFootballFixture } from "./types.ts";
 
 export type { FootballTeamReference } from "@/lib/football/team-id";
 
@@ -10,6 +10,7 @@ export type FootballHistoryProvider = "football-data" | "api-football" | "thespo
 export type HistoricalMatch = {
   externalId: string;
   provider: FootballHistoryProvider;
+  season?: number;
   league: string;
   matchTime: string;
   status: string;
@@ -90,9 +91,10 @@ function normalizeApiFootballFixture(fixture: ApiFootballFixture, provider: "api
   return {
     externalId: String(fixture.fixture.id),
     provider,
+    season: fixture.league?.season,
     league: fixture.league?.name || "",
     matchTime: fixture.fixture.date,
-    status: "finished",
+    status: fixture.fixture.status?.short || fixture.fixture.status?.long || "finished",
     homeTeamId: String(fixture.teams.home.id),
     homeTeam: fixture.teams.home.name,
     awayTeamId: String(fixture.teams.away.id),
@@ -115,14 +117,22 @@ async function getApiFootballFixtures(params: Record<string, string | number>, p
   return fixtures;
 }
 
-async function getApiFootballTeamHistory(teamId: string) {
-  for (const season of seasonCandidates()) {
+export type HistoricalTeamMatchOptions = {
+  season?: string;
+  seasons?: string[];
+  limit?: number;
+};
+
+async function getApiFootballTeamHistory(teamId: string, options: HistoricalTeamMatchOptions = {}) {
+  const limit = options.limit ?? 10;
+  const seasons = options.seasons?.length ? options.seasons : options.season ? [options.season] : seasonCandidates();
+  for (const season of seasons) {
     const fixtures = await getApiFootballFixtures({ team: teamId, season });
     const matches = fixtures
       .map((fixture) => normalizeApiFootballFixture(fixture, "api-football"))
       .filter((item): item is HistoricalMatch => Boolean(item))
       .sort((left, right) => Date.parse(right.matchTime) - Date.parse(left.matchTime));
-    if (matches.length) return matches.slice(0, 10);
+    if (matches.length) return matches.slice(0, limit);
   }
   return [];
 }
@@ -237,12 +247,12 @@ export async function resolveFootballTeamId(team: FootballTeamReference, knownId
   return resolveApiFootballTeamId(team, knownId);
 }
 
-export async function getHistoricalTeamMatches(team: FootballTeamReference) {
+export async function getHistoricalTeamMatches(team: FootballTeamReference, options: HistoricalTeamMatchOptions = {}) {
   const provider = providerFromEnv();
   if (!provider) return [];
   if (provider === "api-football") {
     const apiFootballId = await resolveApiFootballTeamId(team);
-    return apiFootballId ? getApiFootballTeamHistory(apiFootballId) : [];
+    return apiFootballId ? getApiFootballTeamHistory(apiFootballId, options) : [];
   }
   const rawId = typeof team === "string" ? team.trim() : String(team.thesportsdb_id || team.id || "").trim();
   if (!rawId) return [];

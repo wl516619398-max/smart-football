@@ -1,4 +1,4 @@
-export { isFootballApiConfigured, requestFootballApi as footballApiRequest, requestFootballApiRaw as footballApiRawRequest } from "@/lib/football/api-client";
+export { isFootballApiConfigured, requestFootballApi as footballApiRequest, requestFootballApiRaw as footballApiRawRequest } from "./api-client.ts";
 
 export function footballApiRequestUrl(path: string, params: Record<string, string | number> = {}) {
   const base = process.env.FOOTBALL_API_BASE_URL || process.env.FOOTBALL_API_URL || "https://v3.football.api-sports.io";

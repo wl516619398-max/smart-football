@@ -94,6 +94,7 @@ export type ApiFootballFixture = {
     id: number;
     date: string;
     venue: { name: string | null };
+    status?: { short?: string | null; long?: string | null };
   };
   league: { id: number; name: string; season: number };
   teams: {

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "sync:history": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/sync-team-history.ts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.2",

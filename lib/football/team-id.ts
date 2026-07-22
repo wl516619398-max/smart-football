@@ -1,5 +1,5 @@
-import { footballApiRawRequest } from "@/lib/football/api";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { footballApiRawRequest } from "./api.ts";
+import { getSupabaseServerClient } from "../supabase/server.ts";
 
 export type FootballTeamReference = string | {
   id?: string | number | null;
