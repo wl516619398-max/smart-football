@@ -1,4 +1,4 @@
-import { footballApiRawRequest } from "@/lib/football/api";
+import { footballApiRawRequest, footballApiRequestUrl } from "@/lib/football/api";
 import { getFootballSeasonCandidates } from "@/lib/football/season";
 import { resolveFootballTeamId as resolveApiFootballTeamId, type FootballTeamReference } from "@/lib/football/team-id";
 import type { ApiFootballFixture } from "@/lib/football/types";
@@ -104,9 +104,15 @@ function normalizeApiFootballFixture(fixture: ApiFootballFixture, provider: "api
 }
 
 async function getApiFootballFixtures(params: Record<string, string | number>, path = "fixtures") {
+  console.info("[football-history] request URL:", footballApiRequestUrl(path, params));
   const payload = await footballApiRawRequest<ApiFootballFixture[]>(path, params);
-  if (!payload || isApiFootballError(payload)) return [];
-  return Array.isArray(payload.response) ? payload.response : [];
+  const fixtures = !payload || isApiFootballError(payload) || !Array.isArray(payload.response) ? [] : payload.response;
+  console.info("[football-history]", {
+    teamId: params.team || params.h2h || "",
+    season: params.season || "headtohead",
+    "fixtures length": fixtures.length,
+  });
+  return fixtures;
 }
 
 async function getApiFootballTeamHistory(teamId: string) {

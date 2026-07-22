@@ -71,21 +71,17 @@ function normalizedId(value: unknown) {
   return text(value).trim();
 }
 
-function teamMatches(row: DatabaseMatchRow, side: "home" | "away", team: string, teamId?: string) {
+function teamMatches(row: DatabaseMatchRow, side: "home" | "away", teamId?: string) {
   const rowTeamId = normalizedId(row[`${side}_team_id`] ?? row[`${side}TeamId`]);
-  if (teamId && rowTeamId && rowTeamId === teamId) return true;
-  // Some older rows were synced from a different provider with the same
-  // teams but different numeric IDs. IDs are preferred; names are a legacy
-  // compatibility fallback and never use the current match external_id.
-  return sameTeam(text(row[`${side}_team`] ?? row[`${side}Team`]), team);
+  return Boolean(teamId && rowTeamId && rowTeamId === teamId);
 }
 
 function recentFromRow(row: DatabaseMatchRow, team: string, teamId?: string): RecentMatch | null {
   const home = text(row.home_team ?? row.homeTeam);
   const away = text(row.away_team ?? row.awayTeam);
   const score = scoreFor(row);
-  const homeMatches = teamMatches(row, "home", team, teamId);
-  const awayMatches = teamMatches(row, "away", team, teamId);
+  const homeMatches = teamMatches(row, "home", teamId);
+  const awayMatches = teamMatches(row, "away", teamId);
   if (!score || (!homeMatches && !awayMatches)) return null;
   const isHome = homeMatches;
   const goalsFor = isHome ? score.home : score.away;
@@ -209,18 +205,41 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
   const currentTime = dateValue(currentRow);
   const homeLookupTeam = text(currentRow.home_team_raw) || homeTeam;
   const awayLookupTeam = text(currentRow.away_team_raw) || awayTeam;
+  const [homeFootballDataId, awayFootballDataId] = await Promise.all([
+    resolveFootballTeamId(homeLookupTeam, text(currentRow.home_team_id)),
+    resolveFootballTeamId(awayLookupTeam, text(currentRow.away_team_id)),
+  ]);
+  console.log("[history-query]", {
+    teamId: {
+      home: text(currentRow.home_team_id),
+      away: text(currentRow.away_team_id),
+    },
+    footballDataId: {
+      home: homeFootballDataId,
+      away: awayFootballDataId,
+    },
+  });
   const relatedRows = rows.filter((row) => text(row.external_id) !== text(currentRow.external_id) && dateValue(row) <= currentTime);
   let historyRows: DatabaseMatchRow[] = [];
-  if (supabase) {
+  const footballDataIds = [homeFootballDataId, awayFootballDataId].filter((value): value is string => Boolean(value));
+  if (supabase && footballDataIds.length) {
     console.log("[match-analysis] football_match_history query start", {
       externalId,
-      teamId: {
-        home: currentRow.home_team_id,
-        away: currentRow.away_team_id,
-      },
+      footballDataId: footballDataIds,
     });
     try {
-      const historyResult = await supabase.from("football_match_history").select("*").order("match_time", { ascending: false }).limit(1000);
+      const historyFilter = footballDataIds
+        .flatMap((footballDataId) => [
+          `home_team_id.eq.${footballDataId}`,
+          `away_team_id.eq.${footballDataId}`,
+        ])
+        .join(",");
+      const historyResult = await supabase
+        .from("football_match_history")
+        .select("*")
+        .or(historyFilter)
+        .order("match_time", { ascending: false })
+        .limit(1000);
       console.log("[match-analysis] football_match_history query result", {
         data: historyResult.data,
         error: historyResult.error,
@@ -236,18 +255,15 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
   // name, while football_match_history keeps the provider's original name.
   const homeMatchName = homeLookupTeam || homeTeam;
   const awayMatchName = awayLookupTeam || awayTeam;
-  const homeTeamId = text(currentRow.home_team_id) || teamIdForName(homeLookupTeam);
-  const awayTeamId = text(currentRow.away_team_id) || teamIdForName(awayLookupTeam);
+  const homeTeamId = homeFootballDataId ?? undefined;
+  const awayTeamId = awayFootballDataId ?? undefined;
   const homeDatabaseForm = historicalRows.map((row) => recentFromRow(row, homeMatchName, homeTeamId)).filter((item): item is RecentMatch => Boolean(item)).slice(0, 5);
   const awayDatabaseForm = historicalRows.map((row) => recentFromRow(row, awayMatchName, awayTeamId)).filter((item): item is RecentMatch => Boolean(item)).slice(0, 5);
   let homeApiForm: RecentMatch[] = [];
   let awayApiForm: RecentMatch[] = [];
   try {
     if (!homeDatabaseForm.length || !awayDatabaseForm.length) {
-      const [resolvedHomeTeamId, resolvedAwayTeamId] = await Promise.all([
-        resolveFootballTeamId(homeLookupTeam, homeTeamId),
-        resolveFootballTeamId(awayLookupTeam, awayTeamId),
-      ]);
+      const [resolvedHomeTeamId, resolvedAwayTeamId] = [homeFootballDataId, awayFootballDataId];
       if (!homeDatabaseForm.length && resolvedHomeTeamId) {
       homeApiForm = (await getHistoricalTeamMatches(resolvedHomeTeamId)).slice(0, 5).map((item) => toRecentMatch({
         opponent: item.homeTeamId === resolvedHomeTeamId ? item.awayTeam : item.homeTeam,
@@ -282,24 +298,17 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
   });
 
   const databaseH2H = historicalRows.filter((row) => {
-    const rowHome = text(row.home_team);
-    const rowAway = text(row.away_team);
     const rowHomeId = normalizedId(row.home_team_id ?? row.homeTeamId);
     const rowAwayId = normalizedId(row.away_team_id ?? row.awayTeamId);
     const hasComparableIds = Boolean(homeTeamId && awayTeamId && rowHomeId && rowAwayId);
     const directIdMatch = hasComparableIds && rowHomeId === homeTeamId && rowAwayId === awayTeamId;
     const reversedIdMatch = hasComparableIds && rowHomeId === awayTeamId && rowAwayId === homeTeamId;
-    const directNameMatch = sameTeam(rowHome, homeMatchName) && sameTeam(rowAway, awayMatchName);
-    const reversedNameMatch = sameTeam(rowHome, awayMatchName) && sameTeam(rowAway, homeMatchName);
-    return Boolean(scoreFor(row) && (directIdMatch || reversedIdMatch || directNameMatch || reversedNameMatch));
+    return Boolean(scoreFor(row) && (directIdMatch || reversedIdMatch));
   }).slice(0, 10).map((row): HeadToHeadMatch => ({ home: getTeamDisplayName(text(row.home_team)), away: getTeamDisplayName(text(row.away_team)), score: scoreFor(row)?.value ?? "-", date: text(row.match_time).slice(0, 10) }));
   let apiH2H: HeadToHeadMatch[] = [];
   if (!databaseH2H.length) {
     try {
-      const [resolvedHomeTeamId, resolvedAwayTeamId] = await Promise.all([
-        resolveFootballTeamId(homeLookupTeam, homeTeamId),
-        resolveFootballTeamId(awayLookupTeam, awayTeamId),
-      ]);
+      const [resolvedHomeTeamId, resolvedAwayTeamId] = [homeFootballDataId, awayFootballDataId];
       if (resolvedHomeTeamId && resolvedAwayTeamId) {
         apiH2H = (await getHistoricalHeadToHead(resolvedHomeTeamId, resolvedAwayTeamId)).map((item) => ({
           home: getTeamDisplayName(item.homeTeam),

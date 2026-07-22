@@ -1,10 +1,11 @@
 import { predictMatch, type MatchPrediction } from "@/lib/ai/predictor";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveFootballTeamId } from "@/lib/football/history";
 import type { FootballMatch, FootballRecentMatch, FootballTeamStats } from "@/lib/football/types";
 
 type HistoryRow = Record<string, unknown>;
 
-let historyCache: { expiresAt: number; rows: HistoryRow[] } | null = null;
+let historyCache: { expiresAt: number; key: string; homeTeamId: string; awayTeamId: string; rows: HistoryRow[] } | null = null;
 
 function text(value: unknown) {
   return typeof value === "string" ? value.trim() : value === null || value === undefined ? "" : String(value).trim();
@@ -15,14 +16,9 @@ function number(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function sameName(left: string, right: string) {
-  return left.trim().toLocaleLowerCase() === right.trim().toLocaleLowerCase();
-}
-
-function sideMatches(row: HistoryRow, side: "home" | "away", teamId: string, teamName: string) {
+function sideMatches(row: HistoryRow, side: "home" | "away", teamId: string) {
   const rowId = text(row[`${side}_team_id`]);
-  const rowName = text(row[`${side}_team`]);
-  return (rowId && rowId === teamId) || (!rowId && sameName(rowName, teamName)) || (rowId !== teamId && sameName(rowName, teamName));
+  return Boolean(rowId && rowId === teamId);
 }
 
 function score(row: HistoryRow) {
@@ -31,30 +27,45 @@ function score(row: HistoryRow) {
   return home === null || away === null ? null : { home, away };
 }
 
-async function getHistoryRows() {
-  if (historyCache && historyCache.expiresAt > Date.now()) return historyCache.rows;
+async function getHistoryRows(match: FootballMatch) {
+  const [homeFootballDataId, awayFootballDataId] = await Promise.all([
+    resolveFootballTeamId(match.homeTeam),
+    resolveFootballTeamId(match.awayTeam),
+  ]);
+  const footballDataIds = [homeFootballDataId, awayFootballDataId].filter((value): value is string => Boolean(value));
+  const key = footballDataIds.slice().sort().join(",");
+  console.info("[history-query]", {
+    teamId: { home: match.homeTeam.id, away: match.awayTeam.id },
+    footballDataId: { home: homeFootballDataId, away: awayFootballDataId },
+  });
+  if (!key || !footballDataIds.length) return { homeTeamId: homeFootballDataId || "", awayTeamId: awayFootballDataId || "", rows: [] as HistoryRow[] };
+  if (historyCache && historyCache.key === key && historyCache.expiresAt > Date.now()) return historyCache;
   const supabase = getSupabaseServerClient();
-  if (!supabase) return [];
+  if (!supabase) return { homeTeamId: homeFootballDataId || "", awayTeamId: awayFootballDataId || "", rows: [] as HistoryRow[] };
 
+  const historyFilter = footballDataIds
+    .flatMap((footballDataId) => [`home_team_id.eq.${footballDataId}`, `away_team_id.eq.${footballDataId}`])
+    .join(",");
   const { data, error } = await supabase
     .from("football_match_history")
     .select("external_id,home_team_id,away_team_id,home_team,away_team,match_time,home_score,away_score")
+    .or(historyFilter)
     .order("match_time", { ascending: false })
     .limit(1000);
 
-  if (error || !Array.isArray(data)) return [];
+  if (error || !Array.isArray(data)) return { homeTeamId: homeFootballDataId || "", awayTeamId: awayFootballDataId || "", rows: [] as HistoryRow[] };
   const rows = data as HistoryRow[];
-  historyCache = { expiresAt: Date.now() + 60_000, rows };
-  return rows;
+  historyCache = { expiresAt: Date.now() + 60_000, key, homeTeamId: homeFootballDataId || "", awayTeamId: awayFootballDataId || "", rows };
+  return historyCache;
 }
 
-function summarizeTeam(teamId: string, teamName: string, rows: HistoryRow[]): FootballTeamStats | null {
+function summarizeTeam(teamId: string, rows: HistoryRow[]): FootballTeamStats | null {
   const matches = rows
     .map((row): FootballRecentMatch | null => {
       const result = score(row);
       if (!result) return null;
-      const isHome = sideMatches(row, "home", teamId, teamName);
-      const isAway = sideMatches(row, "away", teamId, teamName);
+      const isHome = sideMatches(row, "home", teamId);
+      const isAway = sideMatches(row, "away", teamId);
       if (!isHome && !isAway) return null;
       const goalsFor = isHome ? result.home : result.away;
       const goalsAgainst = isHome ? result.away : result.home;
@@ -101,8 +112,8 @@ function summarizeTeam(teamId: string, teamName: string, rows: HistoryRow[]): Fo
 
 function headToHead(homeTeam: FootballMatch["homeTeam"], awayTeam: FootballMatch["awayTeam"], rows: HistoryRow[]) {
   const matches = rows.filter((row) => {
-    const direct = sideMatches(row, "home", homeTeam.id, homeTeam.name) && sideMatches(row, "away", awayTeam.id, awayTeam.name);
-    const reversed = sideMatches(row, "home", awayTeam.id, awayTeam.name) && sideMatches(row, "away", homeTeam.id, homeTeam.name);
+    const direct = sideMatches(row, "home", homeTeam.id) && sideMatches(row, "away", awayTeam.id);
+    const reversed = sideMatches(row, "home", awayTeam.id) && sideMatches(row, "away", homeTeam.id);
     return score(row) && (direct || reversed);
   });
   let homeWins = 0;
@@ -111,7 +122,7 @@ function headToHead(homeTeam: FootballMatch["homeTeam"], awayTeam: FootballMatch
   for (const row of matches) {
     const result = score(row);
     if (!result) continue;
-    const homeIsStoredHome = sideMatches(row, "home", homeTeam.id, homeTeam.name);
+    const homeIsStoredHome = sideMatches(row, "home", homeTeam.id);
     const homeScore = homeIsStoredHome ? result.home : result.away;
     const awayScore = homeIsStoredHome ? result.away : result.home;
     if (homeScore > awayScore) homeWins += 1;
@@ -136,11 +147,17 @@ function adjustForHeadToHead(prediction: MatchPrediction, h2h: ReturnType<typeof
 }
 
 export async function getDynamicMatchPrediction(match: FootballMatch): Promise<MatchPrediction | null> {
-  const rows = await getHistoryRows();
-  const homeStats = summarizeTeam(match.homeTeam.id, match.homeTeam.name, rows);
-  const awayStats = summarizeTeam(match.awayTeam.id, match.awayTeam.name, rows);
+  const history = await getHistoryRows(match);
+  const rows = history.rows;
+  const homeStats = summarizeTeam(history.homeTeamId, rows);
+  const awayStats = summarizeTeam(history.awayTeamId, rows);
   if (!homeStats || !awayStats) return null;
 
-  const enrichedMatch: FootballMatch = { ...match, stats: { home: homeStats, away: awayStats } };
-  return adjustForHeadToHead(predictMatch(enrichedMatch), headToHead(match.homeTeam, match.awayTeam, rows));
+  const enrichedMatch: FootballMatch = {
+    ...match,
+    homeTeam: { ...match.homeTeam, id: history.homeTeamId },
+    awayTeam: { ...match.awayTeam, id: history.awayTeamId },
+    stats: { home: homeStats, away: awayStats },
+  };
+  return adjustForHeadToHead(predictMatch(enrichedMatch), headToHead(enrichedMatch.homeTeam, enrichedMatch.awayTeam, rows));
 }

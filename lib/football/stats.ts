@@ -1,4 +1,4 @@
-import { footballApiRawRequest } from "@/lib/football/api";
+import { footballApiRawRequest, footballApiRequestUrl } from "@/lib/football/api";
 import { getFootballDataProvider } from "@/lib/football/data-provider";
 import { getFootballSeasonCandidates } from "@/lib/football/season";
 import { resolveFootballTeamId, type FootballTeamReference } from "@/lib/football/team-id";
@@ -84,6 +84,7 @@ async function getApiFootballRecentStats(team: FootballTeamReference): Promise<T
   const teamId = await resolveFootballTeamId(team);
   if (!teamId) return null;
   for (const season of getSeasonCandidates()) {
+    console.info("[football-stats] request URL:", footballApiRequestUrl("fixtures", { team: teamId, season }));
     const rawResponse = await footballApiRawRequest<ApiFootballFixture[]>("fixtures", { team: teamId, season });
     console.info(`[Football stats] Football API raw response season=${season}:`, JSON.stringify(rawResponse, null, 2));
     const fixtures = Array.isArray(rawResponse?.response)
@@ -91,7 +92,7 @@ async function getApiFootballRecentStats(team: FootballTeamReference): Promise<T
         .sort((left, right) => Date.parse(right.fixture.date) - Date.parse(left.fixture.date))
         .slice(0, 10)
       : [];
-    console.info(`[Football stats] fixtures data length season=${season}:`, fixtures.length);
+    console.info(`[football-stats] teamId=${teamId} season=${season} fixtures length=${fixtures.length}`);
     if (!fixtures.length) continue;
 
     const parsed = fixtures
