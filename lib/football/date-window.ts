@@ -12,7 +12,7 @@ export function toShanghaiDateKey(value: string | Date) {
   }).format(date);
 }
 
-export function getUpcomingDateWindow(days = 30) {
+export function getUpcomingDateWindow(days = 180) {
   const startKey = toShanghaiDateKey(new Date());
   const start = new Date(`${startKey}T00:00:00+08:00`);
   const end = new Date(start);
@@ -22,7 +22,7 @@ export function getUpcomingDateWindow(days = 30) {
   return { start, end, startKey, endKey };
 }
 
-export function isInUpcomingDateWindow(value: string | Date, days = 30) {
+export function isInUpcomingDateWindow(value: string | Date, days = 180) {
   const key = toShanghaiDateKey(value);
   const window = getUpcomingDateWindow(days);
   return Boolean(key && key >= window.startKey && key <= window.endKey);
