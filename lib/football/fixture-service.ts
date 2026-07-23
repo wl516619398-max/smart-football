@@ -1,31 +1,15 @@
-import { footballApiRequest } from "@/lib/football/api";
-import type { ApiFootballFixture, FootballMatch, FootballTeamStats } from "@/lib/football/types";
 import { getFootballMatchFallback, getFootballMatchesFallback } from "@/data/matches";
 import { getUpcomingDateWindow } from "@/lib/football/date-window";
-import { getFootballApiAdapter } from "@/lib/football/adapters";
-
-const emptyStats = (teamId: string): FootballTeamStats => ({ teamId, attack: 50, defense: 50, form: 50, homeAdvantage: 50, possession: 50, recentMatches: [], goalsFor: 0, goalsAgainst: 0, xG: 1.5, rank: 20 });
+import { getFootballDataProvider } from "@/lib/football/data-provider";
+import { filterTodayHotMatches } from "@/lib/football/hot-leagues";
+import type { FootballMatch } from "@/lib/football/types";
+import type { MatchData } from "@/lib/data-provider/types";
+import { decodeUnicodeDeep } from "@/lib/utils/decode-unicode";
 
 export type UpcomingFixturesResult = {
   matches: FootballMatch[];
   source: "football-api" | "mock";
 };
-
-function normalizeFixture(fixture: ApiFootballFixture): FootballMatch {
-  const homeId = String(fixture.teams.home.id);
-  const awayId = String(fixture.teams.away.id);
-  return {
-    id: String(fixture.fixture.id),
-    league: fixture.league.name,
-    homeTeam: { id: homeId, name: fixture.teams.home.name, shortName: fixture.teams.home.name, logo: fixture.teams.home.logo ?? undefined },
-    awayTeam: { id: awayId, name: fixture.teams.away.name, shortName: fixture.teams.away.name, logo: fixture.teams.away.logo ?? undefined },
-    date: fixture.fixture.date,
-    venue: fixture.fixture.venue.name ?? "待确认",
-    odds: { homeWin: 33, draw: 34, awayWin: 33 },
-    stats: { home: emptyStats(homeId), away: emptyStats(awayId) },
-    injuries: [],
-  };
-}
 
 export async function getUpcomingFixtures(): Promise<FootballMatch[]> {
   return (await getUpcomingFixturesWithSource()).matches;
@@ -33,33 +17,101 @@ export async function getUpcomingFixtures(): Promise<FootballMatch[]> {
 
 export async function getUpcomingFixturesWithSource(): Promise<UpcomingFixturesResult> {
   const window = getUpcomingDateWindow();
-  const fixtures = await footballApiRequest<ApiFootballFixture[]>("fixtures", { from: window.startKey, to: window.endKey });
-  if (fixtures?.length) return { matches: fixtures.map(normalizeFixture), source: "football-api" };
-
-  const nearestFixtures = await footballApiRequest<ApiFootballFixture[]>("fixtures", { next: 10 });
-  if (nearestFixtures?.length) return { matches: nearestFixtures.map(normalizeFixture), source: "football-api" };
+  const provider = getFootballDataProvider();
 
   try {
-    const sportsDbMatches = await getFootballApiAdapter("api", "thesportsdb").getUpcomingMatches();
-    if (sportsDbMatches.length) return { matches: sportsDbMatches, source: "football-api" };
+    const matches = await provider.getMatches({ from: window.startKey, to: window.endKey });
+    if (matches.length) {
+      return {
+        matches: decodeUnicodeDeep(matches),
+        source: provider.kind === "mock" ? "mock" : "football-api",
+      };
+    }
   } catch {
-    // Continue to the static fallback only after all real providers fail.
+    // The unified Provider owns its fallback behavior. Keep a final static fallback here.
   }
 
-  return { matches: getFootballMatchesFallback(), source: "mock" };
+  return { matches: decodeUnicodeDeep(getFootballMatchesFallback()), source: "mock" };
+}
+
+export async function getTodayHotFixturesWithSource(): Promise<UpcomingFixturesResult> {
+  const today = getUpcomingDateWindow(0);
+  const provider = getFootballDataProvider();
+
+  try {
+    const matches = filterTodayHotMatches(await provider.getMatches({ from: today.startKey, to: today.startKey }));
+    if (matches.length) {
+      return {
+        matches: decodeUnicodeDeep(matches),
+        source: provider.kind === "mock" ? "mock" : "football-api",
+      };
+    }
+  } catch {
+    // Keep the static Mock fallback below when the configured source is unavailable.
+  }
+
+  return {
+    matches: filterTodayHotMatches(decodeUnicodeDeep(getFootballMatchesFallback())),
+    source: "mock",
+  };
+}
+
+/** Returns all fixtures scheduled for today in Shanghai time. */
+export async function getTodayFixturesWithSource(): Promise<UpcomingFixturesResult> {
+  const today = getUpcomingDateWindow(0);
+  const provider = getFootballDataProvider();
+
+  try {
+    const matches = await provider.getMatches({ from: today.startKey, to: today.startKey });
+    if (matches.length) {
+      return {
+        matches: decodeUnicodeDeep(matches),
+        source: provider.kind === "mock" ? "mock" : "football-api",
+      };
+    }
+  } catch {
+    // Continue to the static fallback.
+  }
+
+  return { matches: decodeUnicodeDeep(getFootballMatchesFallback()), source: "mock" };
 }
 
 export async function getFixtureDetail(id: string): Promise<FootballMatch | undefined> {
-  const fixtures = await footballApiRequest<ApiFootballFixture[]>("fixtures", { id });
-  if (fixtures?.[0]) return normalizeFixture(fixtures[0]);
+  const provider = getFootballDataProvider();
 
   try {
-    const sportsDbMatches = await getFootballApiAdapter("api", "thesportsdb").getUpcomingMatches();
-    const match = sportsDbMatches.find((item) => item.id === id);
-    if (match) return match;
+    const match = await provider.getMatch(id);
+    if (match) return decodeUnicodeDeep(match);
   } catch {
-    // Fall through to the static match fallback.
+    // Fall through to the static Mock fallback.
   }
 
-  return getFootballMatchFallback(id);
+  return decodeUnicodeDeep(getFootballMatchFallback(id));
+}
+
+function toMatchData(match: FootballMatch): MatchData {
+  return {
+    match_id: match.id,
+    league: match.league,
+    home_team: { id: match.homeTeam.id, name: match.homeTeam.name, logo: match.homeTeam.logo },
+    away_team: { id: match.awayTeam.id, name: match.awayTeam.name, logo: match.awayTeam.logo },
+    match_time: match.date,
+    home_team_stats: match.stats.home,
+    away_team_stats: match.stats.away,
+    recent_form: { home: match.stats.home.recentMatches, away: match.stats.away.recentMatches },
+    head_to_head: { matches: [], home_wins: 0, draws: 0, away_wins: 0 },
+    odds: { home: match.odds.homeWin, draw: match.odds.draw, away: match.odds.awayWin },
+    injuries: match.injuries,
+  };
+}
+
+export async function getUpcomingMatchData(): Promise<MatchData[]> {
+  const provider = getFootballDataProvider();
+  return decodeUnicodeDeep((await provider.getMatches()).map(toMatchData));
+}
+
+export async function getMatchData(id: string): Promise<MatchData | null> {
+  const provider = getFootballDataProvider();
+  const match = await provider.getMatch(id);
+  return match ? decodeUnicodeDeep(toMatchData(match)) : null;
 }

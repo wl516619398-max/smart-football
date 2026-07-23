@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 type ShareStatus = "idle" | "copied" | "shared";
 
-export function ShareButton() {
+export function ShareButton({ matchId }: { matchId?: string }) {
   const [status, setStatus] = useState<ShareStatus>("idle");
 
   useEffect(() => {
@@ -15,7 +15,7 @@ export function ShareButton() {
   }, [status]);
 
   async function share() {
-    const url = window.location.href;
+    const url = matchId ? `${window.location.origin}/share/${encodeURIComponent(matchId)}` : window.location.href;
     try {
       if (navigator.share) {
         await navigator.share({ title: document.title, url });

@@ -4,6 +4,7 @@ import type { FootballAnalysisResult } from "@/lib/ai/football-analyzer";
 import type { OddsValueOutput } from "@/lib/odds/value-engine";
 import type { MatchPrediction, PredictionTeamStats } from "@/lib/prediction/types";
 import type { AiMatchAnalysisRow } from "@/types/ai-match-analysis";
+import { decodeUnicode, decodeUnicodeDeep } from "@/lib/utils/decode-unicode";
 
 type AthenaReportCardProps = {
   homeTeam: string;
@@ -42,8 +43,14 @@ function section(title: string, content: string, icon: LucideIcon, tone?: string
   return { title, content, icon, tone };
 }
 
+function storedText(value: unknown, fallback: string) {
+  return typeof value === "string" && decodeUnicode(value).trim() ? decodeUnicode(value) : fallback;
+}
+
 function buildFallbackCopy(props: AthenaReportCardProps): ReportCopy {
-  const { homeTeam, awayTeam, homeStats, awayStats, prediction, oddsValue } = props;
+  const { homeStats, awayStats, prediction, oddsValue } = props;
+  const homeTeam = decodeUnicode(props.homeTeam);
+  const awayTeam = decodeUnicode(props.awayTeam);
   const leader = prediction.homeWin >= prediction.awayWin ? homeTeam : awayTeam;
   const maxValue = Math.max(Math.abs(oddsValue.value.home), Math.abs(oddsValue.value.draw), Math.abs(oddsValue.value.away));
   const summary = `${homeTeam} vs ${awayTeam} \u7684\u5f53\u524d\u6a21\u578b\u89c2\u70b9\u57fa\u4e8e\u4e3b\u5ba2\u573a\u73af\u5883\u3001\u8fd1\u671f\u72b6\u6001\u3001\u653b\u9632\u80fd\u529b\u548c\u5e02\u573a\u6570\u636e\u3002\u653b\u51fb\u3001\u9632\u5b88\u4e0e\u72b6\u6001\u8bc4\u5206\u5206\u522b\u4e3a ${Math.round(homeStats.attack)}-${Math.round(awayStats.attack)}\u3001${Math.round(homeStats.defense)}-${Math.round(awayStats.defense)}\u3001${Math.round(homeStats.form)}-${Math.round(awayStats.form)}\u3002\u6a21\u578b\u6682\u65f6\u66f4\u504f\u5411${leader}\uff0c\u4f46\u9996\u53d1\u3001\u4f24\u505c\u3001\u6bd4\u8d5b\u8282\u594f\u4e0e\u4e34\u573a\u6267\u884c\u4ecd\u4f1a\u5f71\u54cd\u5b9e\u9645\u8d70\u52bf\u3002\u672c\u6bb5\u4ec5\u4f5c\u4e3a\u8d5b\u4e8b\u4fe1\u606f\u53c2\u8003\uff0c\u4e0d\u4ee3\u8868\u786e\u5b9a\u7ed3\u679c\u3002`;
@@ -77,42 +84,43 @@ function buildStoredCopy(props: AthenaReportCardProps, fallback: ReportCopy): Re
   const content = stored.analysis ?? stored;
   const reportLevel = content.report_level === "vip" || stored.report_level === "vip" ? "vip" : "standard";
   return {
-    summary: content.summary || stored.summary || fallback.summary,
+    summary: storedText(content.summary ?? stored.summary, fallback.summary),
     sections: [
-      section("\u6bd4\u8d5b\u80cc\u666f", content.match_background || NO_DATA, TrendingUp, "border-blue-500/20 bg-blue-500/5"),
-      section("\u53cc\u65b9\u8fd1\u671f\u72b6\u6001", content.recent_form_analysis || NO_DATA, TrendingUp),
-      section("\u653b\u9632\u6570\u636e\u5206\u6790", content.strength_analysis || `${content.home_analysis || NO_DATA} ${content.away_analysis || ""}`, ShieldCheck),
-      section("\u5386\u53f2\u4ea4\u950b\u5206\u6790", content.head_to_head_analysis || NO_DATA, TrendingUp),
-      section("\u6218\u672f\u5206\u6790", content.tactical_analysis || NO_DATA, Lightbulb),
-      section("\u5173\u952e\u7403\u5458\u56e0\u7d20", content.key_player_analysis || NO_DATA, Users),
-      section("\u8d54\u7387\u5206\u6790", content.odds_value_analysis || NO_DATA, Gauge),
-      section("AI\u9884\u6d4b", content.result_reasoning || content.match_trend || NO_DATA, TrendingUp),
-      section("\u98ce\u9669\u63d0\u793a", content.risk_warning || NO_DATA, AlertTriangle, "border-amber-500/20 bg-amber-500/5"),
+      section("\u6bd4\u8d5b\u80cc\u666f", storedText(content.match_background, NO_DATA), TrendingUp, "border-blue-500/20 bg-blue-500/5"),
+      section("\u53cc\u65b9\u8fd1\u671f\u72b6\u6001", storedText(content.recent_form_analysis, NO_DATA), TrendingUp),
+      section("\u653b\u9632\u6570\u636e\u5206\u6790", storedText(content.strength_analysis, `${storedText(content.home_analysis, NO_DATA)} ${storedText(content.away_analysis, "")}`), ShieldCheck),
+      section("\u5386\u53f2\u4ea4\u950b\u5206\u6790", storedText(content.head_to_head_analysis, NO_DATA), TrendingUp),
+      section("\u6218\u672f\u5206\u6790", storedText(content.tactical_analysis, NO_DATA), Lightbulb),
+      section("\u5173\u952e\u7403\u5458\u56e0\u7d20", storedText(content.key_player_analysis, NO_DATA), Users),
+      section("\u8d54\u7387\u5206\u6790", storedText(content.odds_value_analysis, NO_DATA), Gauge),
+      section("AI\u9884\u6d4b", storedText(content.result_reasoning ?? content.match_trend, NO_DATA), TrendingUp),
+      section("\u98ce\u9669\u63d0\u793a", storedText(content.risk_warning, NO_DATA), AlertTriangle, "border-amber-500/20 bg-amber-500/5"),
     ],
-    factors: [content.home_analysis, content.away_analysis, content.goal_prediction].filter((value): value is string => Boolean(value)),
-    risks: [content.risk_warning || NO_DATA],
-    direction: content.result_reasoning || content.match_trend || fallback.direction,
-    confidence: clamp(Number(content.confidence ?? stored.confidence ?? fallback.confidence)),
-    scores: [content.score_prediction || stored.score_prediction || fallback.scores[0]],
-    goals: content.goal_prediction || stored.goal_prediction || fallback.goals,
+    factors: [content.home_analysis, content.away_analysis, content.goal_prediction].filter((value): value is string => typeof value === "string" && Boolean(value)).map((value) => decodeUnicode(value)),
+    risks: [storedText(content.risk_warning, NO_DATA)],
+    direction: storedText(content.result_reasoning ?? content.match_trend, fallback.direction),
+    confidence: clamp(Number(content.confidence_score ?? stored.confidence_score ?? fallback.confidence)),
+    scores: [storedText(content.score_prediction ?? stored.score_prediction, fallback.scores[0])],
+    goals: storedText(content.goal_prediction ?? stored.goal_prediction, fallback.goals),
     level: reportLevel,
   };
 }
 
 function SectionBody({ content }: { content: string }) {
-  const points = content.split(/[\u3002\uff01\uff1f\uff1b\n]/).map((item) => item.trim()).filter(Boolean);
-  if (points.length < 2) return <p>{content}</p>;
+  const decodedContent = decodeUnicode(content);
+  const points = decodedContent.split(/[\u3002\uff01\uff1f\uff1b\n]/).map((item) => item.trim()).filter(Boolean);
+  if (points.length < 2) return <p>{decodedContent}</p>;
   return <ul className="space-y-2">{points.map((point, index) => <li key={`${point}-${index}`} className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400" />{point}</li>)}</ul>;
 }
 
 function ReportSection({ item }: { item: ReportSection }) {
   const Icon = item.icon;
-  return <div className={`rounded-xl border p-4 ${item.tone ?? "border-slate-800 bg-slate-900/30"}`}><p className="flex items-center gap-2 text-xs font-semibold tracking-wide text-slate-300"><Icon className="h-4 w-4 text-blue-300" />{item.title}</p><div className="mt-3 text-sm leading-7 text-slate-300"><SectionBody content={item.content} /></div></div>;
+  return <div className={`rounded-xl border p-4 ${item.tone ?? "border-slate-800 bg-slate-900/30"}`}><p className="flex items-center gap-2 text-xs font-semibold tracking-wide text-slate-300"><Icon className="h-4 w-4 text-blue-300" />{decodeUnicode(item.title)}</p><div className="mt-3 text-sm leading-7 text-slate-300"><SectionBody content={item.content} /></div></div>;
 }
 
 export function AthenaReportCard(props: AthenaReportCardProps) {
   const fallback = buildFallbackCopy(props);
-  const report = buildStoredCopy(props, fallback);
+  const report = decodeUnicodeDeep(buildStoredCopy(props, fallback));
   const reliability = getReliability(report.confidence);
   const levelLabel = report.level === "vip" ? "VIP\u6df1\u5ea6\u62a5\u544a \u00b7 2000-3000\u5b57" : "\u666e\u901a\u62a5\u544a \u00b7 800-1500\u5b57";
 
@@ -120,19 +128,19 @@ export function AthenaReportCard(props: AthenaReportCardProps) {
     <Card className="overflow-hidden border-blue-500/20 bg-gradient-to-br from-[#111827] via-[#111d3a] to-[#111827] shadow-xl shadow-blue-950/20">
       <CardHeader className="border-b border-white/10">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div><div className="flex items-center gap-2 text-xs font-medium text-blue-300"><BrainCircuit className="h-4 w-4" />ATHENA AI REPORT</div><CardTitle className="mt-2 text-xl text-white">Athena AI \u5206\u6790\u62a5\u544a</CardTitle><p className="mt-2 text-sm text-slate-400">\u57fa\u4e8e\u6bd4\u8d5b\u6570\u636e\u5e93\u3001\u8fd1\u671f\u72b6\u6001\u3001\u5386\u53f2\u4ea4\u950b\u4e0e\u5e02\u573a\u6570\u636e\u751f\u6210\u3002</p></div>
-          <div className="flex flex-col items-end gap-2"><span className="rounded-full border border-blue-400/20 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-200">{levelLabel}</span><span className="text-xs text-slate-500">Athena AI Engine \u00b7 Analysis Model</span></div>
+          <div><div className="flex items-center gap-2 text-xs font-medium text-blue-300"><BrainCircuit className="h-4 w-4" />ATHENA AI REPORT</div><CardTitle className="mt-2 text-xl text-white">{decodeUnicode("Athena AI \\u5206\\u6790\\u62a5\\u544a")}</CardTitle><p className="mt-2 text-sm text-slate-400">{decodeUnicode("\\u57fa\\u4e8e\\u6bd4\\u8d5b\\u6570\\u636e\\u5e93\\u3001\\u8fd1\\u671f\\u72b6\\u6001\\u3001\\u5386\\u53f2\\u4ea4\\u950b\\u4e0e\\u5e02\\u573a\\u6570\\u636e\\u751f\\u6210\\u3002")}</p></div>
+          <div className="flex flex-col items-end gap-2"><span className="rounded-full border border-blue-400/20 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-200">{decodeUnicode(levelLabel)}</span><span className="text-xs text-slate-500">{decodeUnicode("Athena AI Engine \\u00b7 Analysis Model")}</span></div>
         </div>
-        <div className="mt-4 rounded-xl border border-slate-700/80 bg-slate-950/30 p-3 text-xs text-slate-400"><span className="font-medium text-slate-300">AI\u5224\u65ad\u53ef\u4fe1\u5ea6: {reliability.label}</span><span className="mx-2 text-slate-700">\u00b7</span>{reliability.reason}</div>
+        <div className="mt-4 rounded-xl border border-slate-700/80 bg-slate-950/30 p-3 text-xs text-slate-400"><span className="font-medium text-slate-300">{decodeUnicode("AI\\u5224\\u65ad\\u53ef\\u4fe1\\u5ea6")}: {decodeUnicode(reliability.label)}</span><span className="mx-2 text-slate-700">{decodeUnicode("\\u00b7")}</span>{decodeUnicode(reliability.reason)}</div>
       </CardHeader>
       <CardContent className="space-y-4 pt-5">
-        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4"><p className="flex items-center gap-2 text-xs font-semibold tracking-wide text-blue-200"><BrainCircuit className="h-4 w-4" />Athena AI \u7efc\u5408\u89c2\u70b9</p><p className="mt-3 text-sm leading-7 text-slate-300">{report.summary}</p></div>
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4"><p className="flex items-center gap-2 text-xs font-semibold tracking-wide text-blue-200"><BrainCircuit className="h-4 w-4" />{decodeUnicode("Athena AI \\u7efc\\u5408\\u89c2\\u70b9")}</p><p className="mt-3 text-sm leading-7 text-slate-300">{decodeUnicode(report.summary)}</p></div>
         <div className="grid gap-4 lg:grid-cols-2">{report.sections.map((item) => <ReportSection key={item.title} item={item} />)}</div>
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="flex items-center gap-2 text-xs font-semibold tracking-wide text-emerald-200"><ShieldCheck className="h-4 w-4" />\u5173\u952e\u5173\u6ce8\u56e0\u7d20</p><ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300">{report.factors.map((factor, index) => <li key={`${factor}-${index}`} className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />{factor}</li>)}</ul></div>
-        <div className="grid gap-4 sm:grid-cols-2"><div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4"><p className="text-xs text-slate-500">AI\u9884\u6d4b\u65b9\u5411</p><p className="mt-2 text-lg font-semibold text-blue-200">{report.direction}</p><p className="mt-2 text-xs leading-5 text-slate-400">\u6a21\u578b\u89c2\u70b9\u4ec5\u4f9b\u8d5b\u4e8b\u4fe1\u606f\u53c2\u8003\u3002</p></div><div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="flex items-center gap-2 text-xs text-slate-500"><Gauge className="h-4 w-4 text-amber-400" />AI\u5224\u65ad\u53ef\u4fe1\u5ea6</p><p className="mt-2 text-2xl font-bold text-amber-200">{report.confidence}% \u00b7 {reliability.label}</p></div></div>
-        <div className="rounded-xl border border-slate-800 bg-slate-950/25 p-4"><p className="text-xs font-semibold text-slate-300">\u6a21\u578b\u9884\u6d4b\u6bd4\u5206\u4e0e\u8fdb\u7403\u8d8b\u52bf</p><p className="mt-2 text-sm leading-6 text-slate-300">{report.scores.join(" \u00b7 ")}</p><p className="mt-2 text-sm leading-6 text-slate-400">{report.goals}</p></div>
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="flex items-center gap-2 text-xs font-semibold text-amber-200"><AlertTriangle className="h-4 w-4" />\u98ce\u9669\u63d0\u793a</p><ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300">{report.risks.map((risk, index) => <li key={`${risk}-${index}`} className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />{risk}</li>)}</ul></div>
-        <p className="text-xs leading-5 text-slate-500">\u672c\u62a5\u544a\u57fa\u4e8e\u5f53\u524d\u53ef\u7528\u6570\u636e\u5e93\u4fe1\u606f\u751f\u6210\uff0c\u6570\u636e\u5b8c\u6574\u5ea6\u3001\u4e34\u573a\u9635\u5bb9\u4e0e\u6bd4\u8d5b\u968f\u673a\u6027\u53ef\u80fd\u5f71\u54cd\u5b9e\u9645\u8d70\u52bf\u3002</p>
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="flex items-center gap-2 text-xs font-semibold tracking-wide text-emerald-200"><ShieldCheck className="h-4 w-4" />{decodeUnicode("\\u5173\\u952e\\u5173\\u6ce8\\u56e0\\u7d20")}</p><ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300">{report.factors.map((factor, index) => <li key={`${factor}-${index}`} className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />{decodeUnicode(factor)}</li>)}</ul></div>
+        <div className="grid gap-4 sm:grid-cols-2"><div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4"><p className="text-xs text-slate-500">{decodeUnicode("AI\\u9884\\u6d4b\\u65b9\\u5411")}</p><p className="mt-2 text-lg font-semibold text-blue-200">{decodeUnicode(report.direction)}</p><p className="mt-2 text-xs leading-5 text-slate-400">{decodeUnicode("\\u6a21\\u578b\\u89c2\\u70b9\\u4ec5\\u4f9b\\u8d5b\\u4e8b\\u4fe1\\u606f\\u53c2\\u8003\\u3002")}</p></div><div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="flex items-center gap-2 text-xs text-slate-500"><Gauge className="h-4 w-4 text-amber-400" />{decodeUnicode("AI\\u5224\\u65ad\\u53ef\\u4fe1\\u5ea6")}</p><p className="mt-2 text-2xl font-bold text-amber-200">{report.confidence}% {decodeUnicode("\\u00b7")} {decodeUnicode(reliability.label)}</p></div></div>
+        <div className="rounded-xl border border-slate-800 bg-slate-950/25 p-4"><p className="text-xs font-semibold text-slate-300">{decodeUnicode("\\u6a21\\u578b\\u9884\\u6d4b\\u6bd4\\u5206\\u4e0e\\u8fdb\\u7403\\u8d8b\\u52bf")}</p><p className="mt-2 text-sm leading-6 text-slate-300">{decodeUnicode(report.scores.join(" \\u00b7 "))}</p><p className="mt-2 text-sm leading-6 text-slate-400">{decodeUnicode(report.goals)}</p></div>
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="flex items-center gap-2 text-xs font-semibold text-amber-200"><AlertTriangle className="h-4 w-4" />{decodeUnicode("\\u98ce\\u9669\\u63d0\\u793a")}</p><ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300">{report.risks.map((risk, index) => <li key={`${risk}-${index}`} className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />{decodeUnicode(risk)}</li>)}</ul></div>
+        <p className="text-xs leading-5 text-slate-500">{decodeUnicode("\\u672c\\u62a5\\u544a\\u57fa\\u4e8e\\u5f53\\u524d\\u53ef\\u7528\\u6570\\u636e\\u5e93\\u4fe1\\u606f\\u751f\\u6210\\uff0c\\u6570\\u636e\\u5b8c\\u6574\\u5ea6\\u3001\\u4e34\\u573a\\u9635\\u5bb9\\u4e0e\\u6bd4\\u8d5b\\u968f\\u673a\\u6027\\u53ef\\u80fd\\u5f71\\u54cd\\u5b9e\\u9645\\u8d70\\u52bf\\u3002")}</p>
       </CardContent>
     </Card>
   );

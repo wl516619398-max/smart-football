@@ -39,6 +39,9 @@ export type FeaturedMatch = {
   homeWin: number | null;
   draw: number | null;
   awayWin: number | null;
+  goalTrend?: string;
+  matchStatus?: string;
+  analysisStatus?: "已分析" | "待分析";
 };
 
 export type CommercialTeamStats = {
@@ -172,6 +175,7 @@ export type MatchRecentStats = {
   losses: number;
   goalsFor: number;
   goalsAgainst: number;
+  form: string;
   trend: RecentMatch["result"][];
 };
 

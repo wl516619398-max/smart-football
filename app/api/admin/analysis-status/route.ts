@@ -8,7 +8,7 @@ type MatchStatus = {
   status: "generated" | "pending" | "error";
   created_at: string;
   updated_at: string;
-  confidence: number | null;
+  confidence_score: number | null;
   version: string;
 };
 
@@ -21,13 +21,13 @@ function authorizationError(request: Request) {
   return null;
 }
 
-function statusFor(matchId: string, analysis: { analysis_version?: string | null; version?: string | null; created_at?: string | null; updated_at?: string | null; confidence?: number | null } | null, error = false): MatchStatus {
+function statusFor(matchId: string, analysis: { analysis_version?: string | null; version?: string | null; created_at?: string | null; updated_at?: string | null; confidence_score?: number | null } | null, error = false): MatchStatus {
   return {
     match_id: matchId,
     status: error ? "error" : analysis ? "generated" : "pending",
     created_at: analysis?.created_at ?? "",
     updated_at: analysis?.updated_at ?? "",
-    confidence: typeof analysis?.confidence === "number" ? analysis.confidence : null,
+    confidence_score: typeof analysis?.confidence_score === "number" ? analysis.confidence_score : null,
     version: analysis?.version ?? analysis?.analysis_version ?? "",
   };
 }
@@ -65,7 +65,7 @@ export async function GET(request: Request) {
 
       const { data: analysis, error: analysisError } = await supabase
         .from("ai_match_analysis")
-        .select("analysis_version, version, created_at, updated_at, confidence")
+        .select("analysis_version, version, created_at, updated_at, confidence_score")
         .eq("match_id", matchId)
         .maybeSingle();
       const status = statusFor(matchId, analysis, Boolean(analysisError));
@@ -103,7 +103,7 @@ export async function GET(request: Request) {
 
     const ids = (matches ?? []).map((match) => String(match.external_id));
     const { data: analyses, error: analysesError } = ids.length
-      ? await supabase.from("ai_match_analysis").select("match_id, analysis_version, version, created_at, updated_at, confidence").in("match_id", ids)
+      ? await supabase.from("ai_match_analysis").select("match_id, analysis_version, version, created_at, updated_at, confidence_score").in("match_id", ids)
       : { data: [], error: null };
     if (analysesError) console.error("[admin/analysis-status] analysis list failed:", analysesError.message);
 

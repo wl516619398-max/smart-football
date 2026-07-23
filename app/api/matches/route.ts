@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getUpcomingFixturesWithSource } from "@/lib/football/fixture-service";
+import { getTodayHotFixturesWithSource } from "@/lib/football/fixture-service";
 import { footballMatchesToDynamicMatchCenterRows, type MatchCenterRow } from "@/lib/football/match-center";
 import { getUpcomingDateWindow, isTodayOrFuture, toShanghaiDateKey } from "@/lib/football/date-window";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
@@ -31,7 +31,7 @@ function filterAndPageFallback(rows: MatchCenterRow[], url: URL, page: number, p
 
 async function getFootballApiFallback(url: URL, page: number, pageSize: number) {
   try {
-    const result = await getUpcomingFixturesWithSource();
+    const result = await getTodayHotFixturesWithSource();
     return { ...filterAndPageFallback(await footballMatchesToDynamicMatchCenterRows(result.matches), url, page, pageSize), source: result.source };
   } catch (error) {
     console.error("Failed to load football API fallback:", error);
@@ -48,13 +48,7 @@ export async function GET(request: Request) {
   const league = url.searchParams.get("league")?.trim() ?? "";
   const search = url.searchParams.get("search")?.trim() ?? "";
 
-  const liveResult = await getUpcomingFixturesWithSource();
-  const liveResponse = filterAndPageFallback(await footballMatchesToDynamicMatchCenterRows(liveResult.matches), url, page, pageSize);
-  if (liveResult.source === "football-api") return NextResponse.json({ ...liveResponse, source: "football-api" });
-
-  if (!supabase) return NextResponse.json({ ...liveResponse, source: "mock" });
-
-  try {
+  if (supabase) try {
     let query = supabase.from("matches").select("external_id,league,home_team,away_team,match_time,home_win,draw,away_win,ai_score", { count: "exact" }).order("match_time", { ascending: true });
 
     if (date) {
@@ -77,7 +71,7 @@ export async function GET(request: Request) {
     if (error) throw new Error(error.message);
 
     const rows = data ?? [];
-    if (!rows.length) return NextResponse.json({ ...liveResponse, source: "mock" });
+    if (!rows.length) return NextResponse.json(await getFootballApiFallback(url, page, pageSize));
 
     const total = count ?? rows.length;
     return NextResponse.json({ success: true, data: rows, total, page, pageSize, totalPages: Math.ceil(total / pageSize), source: "supabase" });
@@ -85,4 +79,6 @@ export async function GET(request: Request) {
     console.error("Failed to load matches from Supabase, using football API fallback:", error);
     return NextResponse.json(await getFootballApiFallback(url, page, pageSize));
   }
+
+  return NextResponse.json(await getFootballApiFallback(url, page, pageSize));
 }

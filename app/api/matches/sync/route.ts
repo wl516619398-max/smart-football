@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { getUpcomingFixtures } from "@/lib/football/fixture-service";
+import { getTodayHotFixturesWithSource } from "@/lib/football/fixture-service";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getDynamicMatchPrediction } from "@/lib/football/dynamic-prediction";
+import { generateAndSaveFeaturedMatchAnalyses } from "@/lib/ai/match-analysis-generator";
 
 function isAuthorized(request: Request) {
   const secret = process.env.MATCH_SYNC_SECRET;
@@ -16,7 +17,8 @@ export async function POST(request: Request) {
   if (!supabase) return NextResponse.json({ success: false, error: "Supabase is not configured" }, { status: 503 });
 
   try {
-    const fixtures = await getUpcomingFixtures();
+    const fixtureResult = await getTodayHotFixturesWithSource();
+    const fixtures = fixtureResult.matches.slice(0, 50);
     const rows = await Promise.all(fixtures.map(async (fixture) => {
       const prediction = await getDynamicMatchPrediction(fixture);
       return {
@@ -38,12 +40,20 @@ export async function POST(request: Request) {
       };
     }));
 
-    if (!rows.length) return NextResponse.json({ success: true, fetched: 0, insertedOrUpdated: 0 });
+    if (!rows.length) return NextResponse.json({ success: true, fetched: 0, insertedOrUpdated: 0, analysisGenerated: 0 });
 
     const { data, error } = await supabase.from("matches").upsert(rows, { onConflict: "external_id" }).select("external_id");
     if (error) throw new Error(error.message);
+    const analysis = await generateAndSaveFeaturedMatchAnalyses(supabase, fixtures, rows);
 
-    return NextResponse.json({ success: true, fetched: fixtures.length, insertedOrUpdated: data?.length ?? rows.length });
+    return NextResponse.json({
+      success: true,
+      provider: fixtureResult.source,
+      fetched: fixtures.length,
+      insertedOrUpdated: data?.length ?? rows.length,
+      analysisGenerated: analysis.generated,
+      analysisFailed: analysis.failed,
+    });
   } catch (error: unknown) {
     console.error("Match sync failed:", error);
     return Response.json({

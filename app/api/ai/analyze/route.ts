@@ -356,7 +356,7 @@ export async function POST(request: Request) {
     }
 
     const analysisInput = buildMatchAnalysisInput(body);
-  console.info(`[Athena AI config] AI_PROVIDER: ${process.env.AI_PROVIDER?.trim() || "openrouter"} hasDeepSeekKey: ${Boolean(process.env.DEEPSEEK_API_KEY?.trim())} deepSeekModel: ${process.env.DEEPSEEK_MODEL?.trim() || "deepseek-chat"} hasOpenRouterKey: ${Boolean(process.env.OPENROUTER_API_KEY?.trim())}`);
+    console.info(`[Athena AI config] AI_PROVIDER: ${process.env.AI_PROVIDER?.trim() || "deepseek"} hasDeepSeekKey: ${Boolean(process.env.DEEPSEEK_API_KEY?.trim())} deepSeekModel: ${process.env.DEEPSEEK_MODEL?.trim() || "deepseek-chat"} hasOpenRouterKey: ${Boolean(process.env.OPENROUTER_API_KEY?.trim())}`);
     const result = await requestAI([
       { role: "system", content: SYSTEM_PROMPT },
       {

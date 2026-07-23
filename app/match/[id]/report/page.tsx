@@ -23,6 +23,7 @@ import type { PredictionTeamStats } from "@/lib/prediction/types";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { AiMatchAnalysisRow } from "@/types/ai-match-analysis";
 import type { MatchRecentStats } from "@/types/match";
+import { decodeUnicodeDeep } from "@/lib/utils/decode-unicode";
 
 export const dynamic = "force-dynamic";
 
@@ -85,11 +86,11 @@ async function getMatch(id: string): Promise<MatchRow | null> {
   const supabase = getSupabaseServerClient();
   if (supabase) {
     const { data, error } = await supabase.from("matches").select("*").eq("external_id", id).maybeSingle();
-    if (!error && data) return data as MatchRow;
+    if (!error && data) return decodeUnicodeDeep(data as MatchRow);
   }
 
   const fixture = await getFixtureDetail(id);
-  return fixture ? footballMatchToMatchCenterRow(fixture) as MatchRow : null;
+  return fixture ? decodeUnicodeDeep(footballMatchToMatchCenterRow(fixture) as MatchRow) : null;
 }
 
 function emptyStats(team: string): TeamRecentStats {
@@ -113,12 +114,20 @@ function normalizeRecent(stats: TeamRecentStats): MatchRecentStats {
     losses: stats.last10.loss,
     goalsFor: stats.goals.scored,
     goalsAgainst: stats.goals.conceded,
+    form: stats.recentMatches.slice(0, 5).map((match) => match.result === "win" ? "W" : match.result === "draw" ? "D" : "L").join(""),
     trend: stats.recentMatches.slice(0, 5).map((match) => match.result),
   };
 }
 
 function storedText(analysis: AiMatchAnalysisRow | null, key: keyof NonNullable<AiMatchAnalysisRow["analysis"]>, fallback: string) {
-  return text(analysis?.analysis?.[key] ?? analysis?.[key], fallback);
+  const row = analysis as unknown as Record<string, unknown> | null;
+  return text(analysis?.analysis?.[key] ?? row?.[key], fallback);
+}
+
+function storedStrings(analysis: AiMatchAnalysisRow | null, key: "key_factors") {
+  const row = analysis as unknown as Record<string, unknown> | null;
+  const value = analysis?.analysis?.[key] ?? row?.[key];
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
 }
 
 function scoreOptions(stored: AiMatchAnalysisRow | null, prediction: ReturnType<typeof predictMatch>): ScoreOption[] {
@@ -151,10 +160,18 @@ export default async function MatchReportPage({ params }: { params: Promise<{ id
   const awayRatingRaw = calculateFootballStrengthRating(awayRaw);
   const prediction = predictMatch(toPredictionStats(homeRatingRaw, 90), toPredictionStats(awayRatingRaw, 50));
   const oddsValue = calculateOddsValue({ prediction: { homeWin: prediction.homeWin, draw: prediction.draw, awayWin: prediction.awayWin }, odds: { home: fixtureOdds.home.odds, draw: fixtureOdds.draw.odds, away: fixtureOdds.away.odds } });
-  const confidence = number(storedAnalysis?.confidence, prediction.confidence);
+  const confidence = number(storedAnalysis?.confidence_score, prediction.confidence);
   const dataComplete = homeRatingRaw.dataAvailable && awayRatingRaw.dataAvailable;
+  const recommendedBet = storedText(storedAnalysis, "recommended_bet", "");
+  const riskLevel = storedText(storedAnalysis, "risk_level", "");
+  const keyFactors = storedStrings(storedAnalysis, "key_factors");
+  const structuredSections = [
+    ...(recommendedBet ? [{ title: "\u6a21\u578b\u5173\u6ce8\u65b9\u5411", icon: "strength" as const, content: recommendedBet }] : []),
+    ...(keyFactors.length ? [{ title: "\u5173\u952e\u56e0\u7d20", icon: "strength" as const, content: keyFactors.join("；") }] : []),
+  ];
+  const structuredRisks = riskLevel ? [`\u98ce\u9669\u7b49\u7ea7\uff1a${riskLevel}`] : [];
   const summary = storedText(storedAnalysis, "summary", "该比赛AI分析将在赛前生成");
-  const sections = [
+  const sections = [...structuredSections,
     { title: "比赛背景分析", icon: "trend" as const, content: storedText(storedAnalysis, "match_background", "该比赛的赛前背景信息正在整理，报告将在赛前生成。") },
     { title: "双方实力分析", icon: "strength" as const, content: storedText(storedAnalysis, "strength_analysis", `${homeTeam}与${awayTeam}的攻防能力对比将在完整报告生成后展示。`) },
     { title: "近期状态分析", icon: "trend" as const, content: storedText(storedAnalysis, "recent_form_analysis", "当前正在同步双方最近5场比赛、进失球和对手强度数据。") },
@@ -180,6 +197,7 @@ export default async function MatchReportPage({ params }: { params: Promise<{ id
   ];
   const risks = [storedText(storedAnalysis, "risk_warning", "当前报告尚未生成，暂无法提供完整风险提示。"), "主力伤停与首发信息可能影响临场表现。", "单场比赛存在随机性，数据样本不能覆盖全部变量。"];
   const rating = (confidence / 20).toFixed(1);
+  risks.unshift(...structuredRisks);
 
   return <main className="mx-auto w-full max-w-7xl px-4 py-8 text-slate-100 sm:px-6 lg:px-8">
     <Link href={`/matches/${id}`} className="mb-5 inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft className="h-4 w-4" />返回比赛详情</Link>

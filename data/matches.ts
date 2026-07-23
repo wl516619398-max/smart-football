@@ -517,6 +517,7 @@ export const featured: FeaturedMatch[] = matchDetails.map((match) => ({
   homeWin: match.probabilities[0]?.value ?? match.prediction.modelProbability,
   draw: match.probabilities[1]?.value ?? 25,
   awayWin: match.probabilities[2]?.value ?? 25,
+  goalTrend: match.prediction.totalGoals,
   ...featuredMeta[match.id],
 }));
 

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft, ArrowUpRight, CalendarDays, Shield, Sparkles, Trophy } from "lucide-react";
-import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ComplianceDisclaimer } from "@/components/common/ComplianceDisclaimer";
 import { teamProvider } from "@/lib/football/team-provider";
@@ -49,7 +48,17 @@ export default async function TeamDetailPage({ params }: { params: Promise<{ id:
   const { id: rawId } = await params;
   const id = decodeURIComponent(rawId);
   const [team, stats, recentMatches] = await Promise.all([teamProvider.getTeam(id), teamProvider.getTeamStats(id), teamProvider.getRecentMatches(id)]);
-  if (!team) notFound();
+  if (!team) {
+    return <main className="mx-auto min-h-[calc(100vh-140px)] w-full max-w-6xl px-4 py-8 text-slate-100 sm:px-6 lg:px-8">
+      <Link href="/matches" className="inline-flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white"><ArrowLeft className="h-4 w-4" />返回比赛列表</Link>
+      <section className="mt-6 rounded-2xl border border-slate-800 bg-[#111827] p-8 text-center shadow-xl shadow-slate-950/20">
+        <p className="text-xs font-medium uppercase tracking-[0.18em] text-blue-300">Team profile</p>
+        <h1 className="mt-3 text-2xl font-semibold text-white">球队资料暂不可用</h1>
+        <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-400">当前数据源尚未同步该球队的完整资料，球队详情将在数据同步后显示。</p>
+      </section>
+      <ComplianceDisclaimer className="mt-5 border-t border-slate-800 pt-5" />
+    </main>;
+  }
 
   return <main className="mx-auto min-h-[calc(100vh-140px)] w-full max-w-6xl px-4 py-8 text-slate-100 sm:px-6 lg:px-8">
     <Link href="/matches" className="inline-flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white"><ArrowLeft className="h-4 w-4" />返回比赛列表</Link>

@@ -59,7 +59,7 @@ export function createMockFootballAdapter(
   return {
     provider,
     async getUpcomingMatches(query) {
-      const matches = getFootballMatchesFallback();
+      const matches = getFootballMatchesFallback().filter((match) => !query?.matchId || match.id === query.matchId);
       return query?.league ? matches.filter((match) => match.league === query.league) : matches;
     },
     async getTeamInfo(teamId, query) {

@@ -1,8 +1,9 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { AiMatchAnalysis, AiMatchAnalysisRow } from "@/types/ai-match-analysis";
+import { decodeUnicodeDeep } from "@/lib/utils/decode-unicode";
 
 type AiMatchAnalysisUpsert = Omit<
-  AiMatchAnalysis,
+  AiMatchAnalysisRow,
   "id" | "created_at" | "updated_at" | "head_to_head_analysis" | "key_player_analysis" | "report_level"
 >;
 
@@ -21,7 +22,7 @@ export async function getAiMatchAnalysis(matchId: string): Promise<AiMatchAnalys
     return null;
   }
 
-  return (data as AiMatchAnalysisRow | null) ?? null;
+  return data ? decodeUnicodeDeep(data as AiMatchAnalysisRow) : null;
 }
 
 export async function upsertAiMatchAnalysis(input: AiMatchAnalysisUpsert) {
@@ -36,5 +37,5 @@ export async function upsertAiMatchAnalysis(input: AiMatchAnalysisUpsert) {
     .single();
 
   if (error) throw new Error(error.message);
-  return data as AiMatchAnalysis;
+  return decodeUnicodeDeep(data as AiMatchAnalysis);
 }

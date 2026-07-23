@@ -1,4 +1,5 @@
 import { footballApiRequest } from "@/lib/football/api";
+import { decodeUnicodeDeep } from "@/lib/utils/decode-unicode";
 
 export type FixtureOdds = {
   home: { odds: number };
@@ -48,7 +49,7 @@ function parseFixtureOdds(response: ApiFixtureOdds[] | null): FixtureOdds | null
       const draw = findOutcome(matchWinner?.values, "draw");
       const away = findOutcome(matchWinner?.values, "away");
       if (home !== null && draw !== null && away !== null) {
-        return { home: { odds: home }, draw: { odds: draw }, away: { odds: away } };
+        return decodeUnicodeDeep({ home: { odds: home }, draw: { odds: draw }, away: { odds: away } });
       }
     }
   }
@@ -57,5 +58,5 @@ function parseFixtureOdds(response: ApiFixtureOdds[] | null): FixtureOdds | null
 
 export async function getFixtureOdds(fixtureId: string): Promise<FixtureOdds> {
   const response = await footballApiRequest<ApiFixtureOdds[]>("odds", { fixture: fixtureId });
-  return parseFixtureOdds(response) ?? MOCK_ODDS;
+  return decodeUnicodeDeep(parseFixtureOdds(response) ?? MOCK_ODDS);
 }

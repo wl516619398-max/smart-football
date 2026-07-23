@@ -6,10 +6,12 @@ import type {
   FootballTeam,
   FootballTeamForm,
 } from "@/lib/football/types";
+import { decodeUnicodeDeep } from "@/lib/utils/decode-unicode";
 
-export type FootballProviderKind = "mock" | "api" | "database" | "external";
+export type FootballProviderKind = "mock" | "api" | "api-football" | "database" | "external";
 
 export type FootballDataQuery = {
+  matchId?: string;
   league?: string;
   teamId?: string;
   from?: string;
@@ -19,6 +21,7 @@ export type FootballDataQuery = {
 export type FootballDataProvider = {
   kind: FootballProviderKind;
   getMatches(query?: FootballDataQuery): Promise<FootballMatch[]>;
+  getMatch(matchId: string): Promise<FootballMatch | null>;
   getTeams(query?: FootballDataQuery): Promise<FootballTeam[]>;
   getStandings(query?: FootballDataQuery): Promise<FootballStanding[]>;
   getForm(teamId: string, query?: FootballDataQuery): Promise<FootballTeamForm>;
@@ -30,10 +33,14 @@ export function getFootballDataProvider(
   const adapter = getFootballApiAdapter(kind);
   return {
     kind: adapter.provider,
-    getMatches: (query) => adapter.getUpcomingMatches(query),
-    getTeams: (query) => adapter.getTeamInfo(query?.teamId, query),
-    getStandings: (query) => adapter.getStandings(query),
-    getForm: (teamId, query) => adapter.getTeamForm(teamId, query),
+  getMatches: async (query) => decodeUnicodeDeep(await adapter.getUpcomingMatches(query)),
+    getTeams: async (query) => decodeUnicodeDeep(await adapter.getTeamInfo(query?.teamId, query)),
+    getStandings: async (query) => decodeUnicodeDeep(await adapter.getStandings(query)),
+  getForm: async (teamId, query) => decodeUnicodeDeep(await adapter.getTeamForm(teamId, query)),
+  getMatch: async (matchId) => {
+    const matches = await adapter.getUpcomingMatches({ matchId });
+    return matches[0] ? decodeUnicodeDeep(matches[0]) : null;
+  },
   };
 }
 
@@ -50,5 +57,7 @@ export const getStandings = (query?: FootballDataQuery) =>
 
 export const getForm = (teamId: string, query?: FootballDataQuery) =>
   footballDataProvider.getForm(teamId, query);
+
+export const getMatch = (matchId: string) => footballDataProvider.getMatch(matchId);
 
 export type { FootballRecentMatch, FootballStanding, FootballTeam, FootballTeamForm };

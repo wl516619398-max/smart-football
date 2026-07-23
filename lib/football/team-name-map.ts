@@ -1,3 +1,5 @@
+import { decodeUnicode } from "@/lib/utils/decode-unicode";
+
 const TEAM_NAME_MAP: Record<string, string> = {
   Arsenal: "阿森纳",
   "Manchester United": "曼彻斯特联",
@@ -64,10 +66,30 @@ const NORMALIZED_TEAM_NAME_MAP = Object.fromEntries(
   Object.entries(TEAM_NAME_MAP).map(([name, displayName]) => [name.toLocaleLowerCase(), displayName]),
 );
 
+function repairUtf8Mojibake(value: string) {
+  if (!value || !Array.from(value).every((character) => character.charCodeAt(0) <= 0xff)) return value;
+
+  try {
+    const bytes = Uint8Array.from(Array.from(value), (character) => character.charCodeAt(0));
+    const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return /[\u3400-\u9fff]/.test(decoded) ? decoded : value;
+  } catch {
+    return value;
+  }
+}
+
+function normalizeTeamName(value: string) {
+  return repairUtf8Mojibake(decodeUnicode(value)).trim();
+}
+
 export function getTeamDisplayName(name: string | null | undefined) {
   const originalName = name?.trim() ?? "";
   if (!originalName) return "未知球队";
-  return TEAM_NAME_MAP[originalName] ?? NORMALIZED_TEAM_NAME_MAP[originalName.toLocaleLowerCase()] ?? originalName;
+
+  const normalizedName = normalizeTeamName(originalName);
+  return TEAM_NAME_MAP[normalizedName]
+    ?? NORMALIZED_TEAM_NAME_MAP[normalizedName.toLocaleLowerCase()]
+    ?? normalizedName;
 }
 
 export { TEAM_NAME_MAP };

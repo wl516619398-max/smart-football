@@ -4,6 +4,7 @@ import { getUpcomingFixturesWithSource } from "@/lib/football/fixture-service";
 import { footballMatchesToDynamicMatchCenterRows } from "@/lib/football/match-center";
 import { getUpcomingDateWindow, isTodayOrFuture } from "@/lib/football/date-window";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { decodeUnicodeDeep } from "@/lib/utils/decode-unicode";
 
 export const metadata: Metadata = {
   title: "比赛中心 | Project Athena",
@@ -14,12 +15,6 @@ export const dynamic = "force-dynamic";
 
 async function getInitialMatches(): Promise<MatchesResponse> {
   const emptyResult: MatchesResponse = { success: false, data: [], total: 0, page: 1, pageSize: 20, totalPages: 0 };
-  const liveResult = await getUpcomingFixturesWithSource();
-  const liveRows = (await footballMatchesToDynamicMatchCenterRows(liveResult.matches)).filter((row) => isTodayOrFuture(row.match_time));
-  if (liveResult.source === "football-api" && liveRows.length) {
-    return { success: true, data: liveRows.slice(0, 20), total: liveRows.length, page: 1, pageSize: 20, totalPages: Math.ceil(liveRows.length / 20) };
-  }
-
   const supabase = getSupabaseServerClient();
   if (supabase) {
     const window = getUpcomingDateWindow();
@@ -31,13 +26,16 @@ async function getInitialMatches(): Promise<MatchesResponse> {
       .range(0, 19);
 
     if (!error && data?.length) {
-      const matches = data as SyncedMatch[];
+      const matches = decodeUnicodeDeep(data as SyncedMatch[]);
       const total = count ?? matches.length;
       return { success: true, data: matches, total, page: 1, pageSize: 20, totalPages: Math.ceil(total / 20) };
     }
 
     if (error) console.error("Failed to load initial matches:", error);
   }
+
+  const liveResult = await getUpcomingFixturesWithSource();
+  const liveRows = decodeUnicodeDeep((await footballMatchesToDynamicMatchCenterRows(liveResult.matches)).filter((row) => isTodayOrFuture(row.match_time)));
 
   try {
     const fallbackRows = liveRows.slice(0, 20);

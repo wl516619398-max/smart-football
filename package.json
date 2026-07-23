@@ -2,12 +2,22 @@
   "name": "project-athena",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "sync:history": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/sync-team-history.ts"
+    "sync:history": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/sync-team-history.ts",
+    "seed:football": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/seed-football-collection.ts",
+    "test:football-api": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/test-football-api.ts",
+    "test:api-football-provider": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/test-api-football-provider.ts",
+    "sync:football": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/sync-football-data.ts",
+    "check:data": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/check-data-quality.ts",
+    "build:analysis-dataset": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/build-analysis-dataset.ts",
+    "test:analysis-dataset": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/build-analysis-dataset.ts --dry-run",
+    "test:analysis-prompt": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/test-analysis-prompt.ts",
+    "run:ai-analysis": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/ai/analysis-runner.ts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.2",

@@ -49,6 +49,13 @@ export type AthenaAIAnalysis = {
   keyFactors: string[];
   dataLimitations: string[];
   scorePrediction: string[];
+  halfTimePrediction?: AthenaPrediction;
+  goalRangePrediction?: {
+    zeroToOne: number;
+    twoToThree: number;
+    fourPlus: number;
+  };
+  scoreProbabilities?: Array<{ score: string; probability: number }>;
   riskLevel: string;
   confidence: number;
   score: number;

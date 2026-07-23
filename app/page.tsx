@@ -6,13 +6,15 @@ import { ArrowRight, CalendarDays, ShieldCheck } from "lucide-react";
 import { featured } from "@/data/matches";
 import { fallbackHomeLeagues, fallbackHomeStats, latestInsights, type HomeLeagueSummary, type HomeOverviewStats } from "@/data/home";
 import { players } from "@/data/mock-data";
-import { getDynamicMatchPrediction } from "@/lib/football/dynamic-prediction";
-import { getFootballDataProvider } from "@/lib/football/data-provider";
-import { getUpcomingFixturesWithSource } from "@/lib/football/fixture-service";
-import { getUpcomingDateWindow, isTodayOrFuture } from "@/lib/football/date-window";
+import { analyzeMatch } from "@/lib/analysis-engine";
+import { footballMatchToMatchData } from "@/lib/data-provider/football-api";
+import { getTodayFixturesWithSource, getTodayHotFixturesWithSource } from "@/lib/football/fixture-service";
+import { getUpcomingDateWindow } from "@/lib/football/date-window";
+import { filterTodayHotMatches } from "@/lib/football/hot-leagues";
 import type { FootballMatch } from "@/lib/football/types";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getPredictionHistorySummary } from "@/lib/history/prediction-history";
+import { decodeUnicodeDeep } from "@/lib/utils/decode-unicode";
 import type { HomeMatchesResult, SyncedHomeMatch } from "@/components/home/LiveHomeMatches";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,14 +27,26 @@ import { VIPBanner } from "@/components/home/VIPBanner";
 import { PerformanceChart } from "@/components/performance-chart";
 import { PlayerCard } from "@/components/player-card";
 
-export const metadata: Metadata = {
+const legacyHomeMetadata: Metadata = {
   title: "Project Athena - AI足球比赛分析平台",
   description: "足球数据分析与赛事信息平台，提供赛事概率模型、球员分析、xG数据与市场数据变化观察。",
 };
 
+export const metadata: Metadata = {
+  ...legacyHomeMetadata,
+  title: "Project Athena｜AI足球赛事分析平台",
+  description: "今日足球赛事中心，提供比赛状态、胜平负概率、进球趋势与AI赛前分析，帮助你快速了解值得关注的赛事。",
+  openGraph: {
+    title: "Project Athena｜AI足球赛事分析平台",
+    description: "今日赛事、概率模型与AI赛前分析，一站式查看足球比赛信息。",
+    type: "website",
+    locale: "zh_CN",
+  },
+};
+
 async function toSyncedHomeMatch(match: FootballMatch): Promise<SyncedHomeMatch> {
-  const prediction = await getDynamicMatchPrediction(match);
-  return {
+  const prediction = analyzeMatch(footballMatchToMatchData(match));
+  return decodeUnicodeDeep({
     external_id: match.id,
     home_team_id: match.homeTeam.id,
     away_team_id: match.awayTeam.id,
@@ -40,41 +54,42 @@ async function toSyncedHomeMatch(match: FootballMatch): Promise<SyncedHomeMatch>
     home_team: match.homeTeam.name,
     away_team: match.awayTeam.name,
     match_time: match.date,
+    status: match.status ?? "NS",
     home_logo: match.homeTeam.logo ?? null,
     away_logo: match.awayTeam.logo ?? null,
-    home_win: prediction?.homeWin ?? null,
-    draw: prediction?.draw ?? null,
-    away_win: prediction?.awayWin ?? null,
-    ai_score: prediction?.confidence ?? null,
-    ai_pick: prediction?.recommendation ?? null,
-    risk_level: prediction?.risk ?? null,
-  };
+    home_win: prediction.home_win_probability,
+    draw: prediction.draw_probability,
+    away_win: prediction.away_win_probability,
+    ai_score: prediction.confidence,
+    ai_pick: prediction.recommended_pick,
+    score_prediction: prediction.expected_score,
+    analysis_status: "待分析",
+    risk_level: prediction.confidence >= 70 ? "低" : prediction.confidence >= 50 ? "中" : "高",
+  });
 }
 
 async function getHomeMatches(): Promise<HomeMatchesResult> {
-  try {
-    const liveResult = await getUpcomingFixturesWithSource();
-    const liveMatches = liveResult.matches.filter((match) => isTodayOrFuture(match.date));
-    if (liveResult.source === "football-api" && liveMatches.length) {
-      return { matches: await Promise.all(liveMatches.slice(0, 3).map(toSyncedHomeMatch)), useFallback: false };
-    }
-  } catch {
-    // Continue to database and provider fallbacks.
-  }
-
   const supabase = getSupabaseServerClient();
   if (supabase) {
     try {
-      const window = getUpcomingDateWindow();
+      const window = getUpcomingDateWindow(0);
+      const nextDay = getUpcomingDateWindow(1);
       const { data, error } = await supabase
         .from("matches")
-        .select("external_id,league,home_team,away_team,match_time,home_win,draw,away_win,ai_score")
+        .select("external_id,league,home_team,away_team,match_time,status,home_win,draw,away_win,ai_score")
         .gte("match_time", window.start.toISOString())
+        .lt("match_time", nextDay.end.toISOString())
         .order("match_time", { ascending: true })
-        .limit(3);
+        .limit(100);
 
       if (!error && data?.length) {
-        return { matches: data as SyncedHomeMatch[], useFallback: false };
+        const todayRows = decodeUnicodeDeep(data as SyncedHomeMatch[]).map((row) => ({
+          ...row,
+          analysis_status: row.ai_score === null ? "待分析" : "已分析",
+        }));
+        if (todayRows.length) {
+          return { matches: todayRows.slice(0, 50) as SyncedHomeMatch[], useFallback: false };
+        }
       }
     } catch {
       // Continue to the football provider and static Mock fallbacks.
@@ -82,17 +97,12 @@ async function getHomeMatches(): Promise<HomeMatchesResult> {
   }
 
   try {
-    const provider = getFootballDataProvider();
-    const providerMatches = await provider.getMatches();
-    const upcomingMatches = providerMatches.filter((match) => isTodayOrFuture(match.date));
-    if (provider.kind === "api" && upcomingMatches.length) {
-      return {
-        matches: await Promise.all(upcomingMatches.slice(0, 3).map(toSyncedHomeMatch)),
-        useFallback: false,
-      };
+    const liveResult = await getTodayFixturesWithSource();
+    if (liveResult.matches.length) {
+      return { matches: await Promise.all(liveResult.matches.slice(0, 50).map(toSyncedHomeMatch)), useFallback: liveResult.source === "mock" };
     }
   } catch {
-    // Continue to the existing API and static Mock fallbacks.
+    // Continue to the existing internal API and static Mock fallbacks.
   }
 
   const requestHeaders = await headers();
@@ -101,11 +111,14 @@ async function getHomeMatches(): Promise<HomeMatchesResult> {
   const protocol = requestHeaders.get("x-forwarded-proto")?.split(",")[0] || "http";
 
   try {
-    const response = await fetch(`${protocol}://${host}/api/matches?page=1&pageSize=3`, { cache: "no-store" });
+    const response = await fetch(`${protocol}://${host}/api/matches?page=1&pageSize=50`, { cache: "no-store" });
     if (!response.ok) return { matches: [], useFallback: true };
     const payload = (await response.json()) as { success: boolean; data: SyncedHomeMatch[] };
-    const hasLiveData = payload.success === true && Array.isArray(payload.data) && payload.data.length > 0;
-    return { matches: hasLiveData ? payload.data.slice(0, 3) : [], useFallback: !hasLiveData };
+      const hasLiveData = payload.success === true && Array.isArray(payload.data) && payload.data.length > 0;
+    return {
+      matches: hasLiveData ? decodeUnicodeDeep(payload.data.slice(0, 50)) : [],
+      useFallback: !hasLiveData,
+    };
   } catch {
     return { matches: [], useFallback: true };
   }
@@ -132,25 +145,22 @@ function getOverviewFromRows(rows: HomeMatchSummaryRow[]): { leagues: HomeLeague
 }
 
 async function getHomeOverview(): Promise<{ leagues: HomeLeagueSummary[]; stats: HomeOverviewStats }> {
-  try {
-    const liveResult = await getUpcomingFixturesWithSource();
-    const upcomingMatches = liveResult.matches.filter((match) => isTodayOrFuture(match.date));
-    if (liveResult.source === "football-api") {
-      const liveOverview = getOverviewFromRows(upcomingMatches.map((match) => ({ league: match.league, match_time: match.date })));
-      if (liveOverview) return liveOverview;
-    }
-  } catch {
-    // Continue to database and provider fallbacks.
-  }
-
   const supabase = getSupabaseServerClient();
   if (supabase) {
     try {
-      const window = getUpcomingDateWindow();
-      const { data, count, error } = await supabase.from("matches").select("league,match_time", { count: "exact" }).gte("match_time", window.start.toISOString());
+      const window = getUpcomingDateWindow(0);
+      const nextDay = getUpcomingDateWindow(1);
+      const { data, count, error } = await supabase
+        .from("matches")
+        .select("league,match_time", { count: "exact" })
+        .gte("match_time", window.start.toISOString())
+        .lt("match_time", nextDay.end.toISOString())
+        .limit(100);
       if (!error && data?.length) {
-        const rows = data as HomeMatchSummaryRow[];
-        return getOverviewFromRows(rows) ?? { leagues: fallbackHomeLeagues, stats: { ...fallbackHomeStats, matchCount: count ?? 0 } };
+        const rows = filterTodayHotMatches(decodeUnicodeDeep(data as HomeMatchSummaryRow[]).map((row) => ({ ...row, date: row.match_time })));
+        const summaryRows = rows.map((row) => ({ league: row.league ?? "", match_time: row.match_time ?? "" }));
+        if (!summaryRows.length) return { leagues: fallbackHomeLeagues, stats: { ...fallbackHomeStats, matchCount: 0 } };
+        return getOverviewFromRows(summaryRows) ?? { leagues: fallbackHomeLeagues, stats: { ...fallbackHomeStats, matchCount: count ?? 0 } };
       }
     } catch {
       // Continue to the football provider and static Mock fallbacks.
@@ -158,12 +168,9 @@ async function getHomeOverview(): Promise<{ leagues: HomeLeagueSummary[]; stats:
   }
 
   try {
-    const provider = getFootballDataProvider();
-    if (provider.kind === "api") {
-      const matches = await provider.getMatches();
-      const providerOverview = getOverviewFromRows(matches.map((match) => ({ league: match.league, match_time: match.date })));
-      if (providerOverview) return providerOverview;
-    }
+    const liveResult = await getTodayHotFixturesWithSource();
+    const providerOverview = getOverviewFromRows(liveResult.matches.map((match) => ({ league: match.league, match_time: match.date })));
+    if (providerOverview) return decodeUnicodeDeep(providerOverview);
   } catch {
     // Use the static Mock overview when the provider is unavailable.
   }

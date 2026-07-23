@@ -33,7 +33,7 @@ function summarizeRecent(items: MatchDetailData["recentForm"]["home"]) {
     summary.goalsAgainst += Number.isFinite(goalsAgainst) ? goalsAgainst : 0;
     summary.trend.push(item.result);
     return summary;
-  }, { matches: [] as MatchDetailData["recentForm"]["home"], wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0, trend: [] as MatchDetailData["recentForm"]["home"][number]["result"][] });
+  }, { matches: [] as MatchDetailData["recentForm"]["home"], wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0, form: "", trend: [] as MatchDetailData["recentForm"]["home"][number]["result"][] });
 }
 
 function createLegacyAnalysis(match: MatchDetailData) {

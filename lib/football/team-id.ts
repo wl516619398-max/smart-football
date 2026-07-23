@@ -112,8 +112,7 @@ async function searchApiFootballTeam(name: string) {
   const candidates = Array.isArray(payload.response) ? payload.response : [];
   const normalized = normalizeName(name);
   const exact = candidates.find((item) => normalizeName(text(item.team?.name)) === normalized);
-  const selected = exact ?? candidates[0];
-  return selected?.team?.id ? String(selected.team.id) : null;
+  return exact?.team?.id ? String(exact.team.id) : null;
 }
 
 export async function resolveFootballTeamId(team: FootballTeamReference, knownId?: string | null) {

@@ -4,9 +4,12 @@ import {
   type OpenRouterResult,
 } from "@/lib/ai/openrouter";
 import { requestDeepSeek } from "@/lib/ai/deepseek";
+import { requestMockAI } from "@/lib/ai/mock";
+import { requestOpenAI } from "@/lib/ai/openai";
 
 export type AIProviderTier = "free" | "vip" | "enterprise";
-export type AIProviderName = "deepseek" | "openrouter" | "free" | "vip" | "enterprise";
+export type AIProviderName = "deepseek" | "openrouter" | "openai" | "mock" | "free" | "vip" | "enterprise";
+export const DEFAULT_AI_PROVIDER: AIProviderName = "deepseek";
 
 export type AIMessage = {
   role: "system" | "user" | "assistant";
@@ -15,7 +18,7 @@ export type AIMessage = {
 
 export type AIProviderOptions = OpenRouterOptions;
 export type AIProviderResult = OpenRouterResult & {
-  provider?: "deepseek" | "openrouter";
+  provider?: "deepseek" | "openrouter" | "openai" | "mock";
   fallback?: boolean;
 };
 
@@ -31,11 +34,11 @@ export type AIProvider = {
 function getConfiguredProvider(): AIProviderName {
   const configuredProvider = process.env.AI_PROVIDER?.trim().toLowerCase();
 
-  if (configuredProvider === "deepseek" || configuredProvider === "openrouter" || configuredProvider === "free" || configuredProvider === "vip" || configuredProvider === "enterprise") {
+  if (configuredProvider === "deepseek" || configuredProvider === "openrouter" || configuredProvider === "openai" || configuredProvider === "mock" || configuredProvider === "free" || configuredProvider === "vip" || configuredProvider === "enterprise") {
     return configuredProvider;
   }
 
-  return "openrouter";
+  return DEFAULT_AI_PROVIDER;
 }
 
 function createProvider(name: AIProviderName, tier: AIProviderTier, generate: AIProvider["generate"]): AIProvider {
@@ -46,12 +49,16 @@ function createProvider(name: AIProviderName, tier: AIProviderTier, generate: AI
   };
 }
 
-function getAIProvider(): AIProvider {
+export function getAIProvider(): AIProvider {
   const configuredProvider = getConfiguredProvider();
 
   switch (configuredProvider) {
     case "openrouter":
       return createProvider("openrouter", "free", requestOpenRouter);
+    case "openai":
+      return createProvider("openai", "enterprise", requestOpenAI);
+    case "mock":
+      return createProvider("mock", "free", requestMockAI);
     case "vip":
       return createProvider("vip", "vip", requestDeepSeek);
     case "enterprise":
@@ -74,22 +81,38 @@ export async function requestAI(
   console.info(`[AI provider] name=${provider.name} tier=${provider.tier}`);
   const result = await provider.generate(messages, options);
 
-  const primaryName = provider.name === "openrouter" ? "openrouter" : "deepseek";
   if (result.success) {
-    return { ...result, provider: primaryName, fallback: false };
+    return { ...result, provider: provider.name === "free" || provider.name === "vip" || provider.name === "enterprise" ? "deepseek" : provider.name, fallback: false };
   }
 
-  if (primaryName === "deepseek") {
-    console.info(`[AI provider] fallback=openrouter primary=${primaryName} status=${result.status}`);
-    const fallback = await requestOpenRouter(messages, options);
-    return fallback.success
-      ? { ...fallback, provider: "openrouter", fallback: true }
-      : { ...result, provider: "deepseek", fallback: true };
+  const fallbackNames: AIProviderName[] = provider.name === "deepseek"
+    ? ["openrouter", "mock"]
+    : provider.name === "openrouter"
+      ? ["deepseek", "mock"]
+      : provider.name === "openai"
+        ? ["deepseek", "openrouter", "mock"]
+        : ["mock"];
+
+  for (const fallbackName of fallbackNames) {
+    const fallbackProvider = getProviderByName(fallbackName);
+    console.info(`[AI provider] fallback=${fallbackName} primary=${provider.name} status=${result.status}`);
+    const fallback = await fallbackProvider.generate(messages, options);
+    if (fallback.success) return { ...fallback, provider: fallbackProvider.name === "free" || fallbackProvider.name === "vip" || fallbackProvider.name === "enterprise" ? "deepseek" : fallbackProvider.name, fallback: true };
   }
 
-  console.info(`[AI provider] fallback=deepseek primary=${primaryName} status=${result.status}`);
-  const fallback = await requestDeepSeek(messages, options);
-  return fallback.success
-    ? { ...fallback, provider: "deepseek", fallback: true }
-    : { ...result, provider: "openrouter", fallback: true };
+  return {
+    ...result,
+    provider: provider.name === "free" || provider.name === "vip" || provider.name === "enterprise" ? "deepseek" : provider.name,
+    fallback: true,
+  };
+}
+
+function getProviderByName(name: AIProviderName): AIProvider {
+  switch (name) {
+    case "openrouter": return createProvider("openrouter", "free", requestOpenRouter);
+    case "openai": return createProvider("openai", "enterprise", requestOpenAI);
+    case "mock": return createProvider("mock", "free", requestMockAI);
+    case "deepseek":
+    default: return createProvider("deepseek", "free", requestDeepSeek);
+  }
 }

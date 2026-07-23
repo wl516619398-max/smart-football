@@ -6,7 +6,7 @@ const FALLBACK_SEASONS = [SEASON, "2024", "2023"];
 const LIMIT = 50;
 const TARGET_TEAMS = [
   { name: "Arsenal", footballDataId: "42" },
-  { name: "Coventry City", footballDataId: "62" },
+  { name: "Coventry City", footballDataId: "1346" },
 ] as const;
 
 type HistoryRow = {
@@ -42,6 +42,16 @@ function toRow(match: Awaited<ReturnType<typeof getHistoricalTeamMatches>>[numbe
 async function syncTeam(team: (typeof TARGET_TEAMS)[number]) {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase server environment is not configured");
+
+  const mapping = await supabase
+    .from("teams")
+    .select("football_data_id")
+    .eq("canonical_name", team.name.toLocaleLowerCase())
+    .maybeSingle();
+  if (mapping.error) throw new Error(`${team.name} mapping query failed: ${mapping.error.message}`);
+  if (mapping.data?.football_data_id && String(mapping.data.football_data_id) !== team.footballDataId) {
+    throw new Error(`${team.name} mapping conflict: stored ${mapping.data.football_data_id}, expected ${team.footballDataId}; refusing to overwrite`);
+  }
 
   const matches = await getHistoricalTeamMatches(
     { name: team.name, football_data_id: team.footballDataId },

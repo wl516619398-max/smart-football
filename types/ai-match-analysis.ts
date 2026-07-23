@@ -18,6 +18,13 @@ export type AiMatchAnalysisContent = {
   risk_warning: string;
   odds_value_analysis: string;
   confidence: number;
+  confidence_score?: number;
+  home_win_probability?: number;
+  draw_probability?: number;
+  away_win_probability?: number;
+  recommended_bet?: string;
+  risk_level?: string;
+  key_factors?: string[];
   report_level: AiReportLevel;
 };
 
@@ -47,7 +54,7 @@ export type AiMatchAnalysis = AiMatchAnalysisContent & {
  * them as nullable columns so existing records remain readable.
  */
 export type AiMatchAnalysisRow = Omit<AiMatchAnalysis, keyof AiMatchAnalysisContent | "analysis"> &
-  Partial<AiMatchAnalysisContent> & {
+  Partial<Omit<AiMatchAnalysisContent, "confidence">> & {
     analysis: Partial<AiMatchAnalysisContent>;
     summary: string;
     match_trend: string;
@@ -57,7 +64,7 @@ export type AiMatchAnalysisRow = Omit<AiMatchAnalysis, keyof AiMatchAnalysisCont
     score_prediction: string;
     goal_prediction: string;
     risk_warning: string;
-    confidence: number;
+    confidence_score: number | null;
   };
 
 export type AiMatchAnalysisInput = {

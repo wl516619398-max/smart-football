@@ -13,7 +13,7 @@ type AnalysisMatch = {
   status: AnalysisStatus;
   created_at: string;
   updated_at: string;
-  confidence: number | null;
+  confidence_score: number | null;
   version: string;
   league: string;
   home_team: string;
@@ -159,7 +159,7 @@ export function AnalysisDashboard() {
               {matches.map((match) => {
                 const meta = statusMeta[match.status];
                 const isGenerating = generatingId === match.match_id;
-                const confidence = getConfidence(match.confidence);
+                const confidence = getConfidence(match.confidence_score);
                 return (
                   <div key={match.match_id} className="flex flex-col gap-4 rounded-xl border border-slate-800 bg-slate-950/30 p-4 md:flex-row md:items-center md:justify-between">
                     <div className="min-w-0">

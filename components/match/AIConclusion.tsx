@@ -3,6 +3,7 @@ import { ArrowDown, CheckCircle2, CircleHelp, ShieldAlert, Sparkles } from "luci
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { MatchDetailData } from "@/types/match";
+import { decodeUnicode } from "@/lib/utils/decode-unicode";
 
 const copy = {
   heading: "Athena AI \u6838\u5fc3\u7ed3\u8bba",
@@ -19,7 +20,15 @@ const copy = {
 };
 
 export function AIConclusion({ match }: { match: MatchDetailData }) {
-  const prediction = match.prediction;
+  const prediction = {
+    ...match.prediction,
+    lean: decodeUnicode(match.prediction.lean),
+    firstChoice: decodeUnicode(match.prediction.firstChoice),
+    cover: decodeUnicode(match.prediction.cover),
+    score: decodeUnicode(match.prediction.score),
+    totalGoals: decodeUnicode(match.prediction.totalGoals),
+    summary: decodeUnicode(match.prediction.summary),
+  };
   const ringStyle = { background: "conic-gradient(#22C55E " + prediction.confidence * 3.6 + "deg, #1e293b 0deg)" };
   const stats = [
     { label: copy.first, value: prediction.firstChoice, tone: "border-green-500/15 bg-green-500/5 text-green-300" },

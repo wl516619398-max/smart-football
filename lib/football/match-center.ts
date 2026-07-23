@@ -1,6 +1,7 @@
 import { predictMatch } from "@/lib/ai/predictor";
 import { getDynamicMatchPrediction } from "@/lib/football/dynamic-prediction";
 import type { FootballMatch } from "@/lib/football/types";
+import { decodeUnicodeDeep } from "@/lib/utils/decode-unicode";
 
 export type MatchCenterRow = {
   external_id: string;
@@ -23,7 +24,7 @@ export type MatchCenterRow = {
 export function footballMatchToMatchCenterRow(match: FootballMatch): MatchCenterRow {
   const prediction = predictMatch(match);
 
-  return {
+  return decodeUnicodeDeep({
     external_id: match.id,
     home_team_id: match.homeTeam.id,
     away_team_id: match.awayTeam.id,
@@ -39,12 +40,12 @@ export function footballMatchToMatchCenterRow(match: FootballMatch): MatchCenter
     ai_score: prediction.confidence,
     ai_pick: prediction.recommendation,
     risk_level: prediction.risk,
-  };
+  });
 }
 
 export async function footballMatchToDynamicMatchCenterRow(match: FootballMatch): Promise<MatchCenterRow> {
   const prediction = await getDynamicMatchPrediction(match);
-  return {
+  return decodeUnicodeDeep({
     external_id: match.id,
     home_team_id: match.homeTeam.id,
     away_team_id: match.awayTeam.id,
@@ -60,13 +61,13 @@ export async function footballMatchToDynamicMatchCenterRow(match: FootballMatch)
     ai_score: prediction?.confidence ?? null,
     ai_pick: prediction?.recommendation ?? null,
     risk_level: prediction?.risk ?? null,
-  };
+  });
 }
 
 export function footballMatchesToMatchCenterRows(matches: FootballMatch[]) {
-  return matches.map(footballMatchToMatchCenterRow);
+  return decodeUnicodeDeep(matches.map(footballMatchToMatchCenterRow));
 }
 
 export async function footballMatchesToDynamicMatchCenterRows(matches: FootballMatch[]) {
-  return Promise.all(matches.map(footballMatchToDynamicMatchCenterRow));
+  return decodeUnicodeDeep(await Promise.all(matches.map(footballMatchToDynamicMatchCenterRow)));
 }

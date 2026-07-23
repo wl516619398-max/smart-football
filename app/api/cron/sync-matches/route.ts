@@ -3,10 +3,13 @@ import { getFootballDataProvider } from "@/lib/football/data-provider";
 import { getDynamicMatchPrediction } from "@/lib/football/dynamic-prediction";
 import type { FootballMatch, FootballStanding } from "@/lib/football/types";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { filterTodayHotMatches } from "@/lib/football/hot-leagues";
+import { getUpcomingDateWindow } from "@/lib/football/date-window";
+import { generateAndSaveFeaturedMatchAnalyses } from "@/lib/ai/match-analysis-generator";
 
 export const dynamic = "force-dynamic";
 
-const SYNC_WINDOW_DAYS = 7;
+const SYNC_WINDOW_DAYS = 0;
 const SHANGHAI_TIME_ZONE = "Asia/Shanghai";
 
 function isAuthorized(request: Request) {
@@ -16,16 +19,9 @@ function isAuthorized(request: Request) {
   return Boolean(secret && authorization === `Bearer ${secret}`);
 }
 
-function formatDate(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
-
 function getSyncWindow() {
-  const from = new Date();
-  const to = new Date(from);
-  to.setDate(to.getDate() + SYNC_WINDOW_DAYS);
-
-  return { from: formatDate(from), to: formatDate(to) };
+  const window = getUpcomingDateWindow(SYNC_WINDOW_DAYS);
+  return { from: window.startKey, to: window.startKey };
 }
 
 function getShanghaiDateKey(value: string) {
@@ -79,7 +75,7 @@ async function getMatchesWithFallback(query: { from: string; to: string }) {
   const configuredSource = process.env.FOOTBALL_API_PROVIDER?.trim().toLowerCase() || configuredProvider.kind;
 
   try {
-    const matches = await configuredProvider.getMatches(query);
+    const matches = filterTodayHotMatches(await configuredProvider.getMatches(query));
     if (matches.length > 0) {
       return {
         matches,
@@ -92,7 +88,7 @@ async function getMatchesWithFallback(query: { from: string; to: string }) {
   }
 
   const mockProvider = getFootballDataProvider("mock");
-  const matches = await mockProvider.getMatches(query);
+  const matches = filterTodayHotMatches(await mockProvider.getMatches(query));
 
   return { matches, provider: configuredSource, usedMockFallback: true };
 }
@@ -120,14 +116,7 @@ async function syncMatches(request: Request) {
       new Map((await Promise.all(matches.map(toMatchRow))).map((row) => [row.external_id, row])).values(),
     );
 
-    let standings: FootballStanding[] = [];
-    try {
-      standings = await getFootballDataProvider().getStandings();
-    } catch (error) {
-      console.error("[cron/sync-matches] standings sync failed:", error);
-    }
-
-    const leagues = uniqueLeagueNames(matches, standings);
+    const leagues = uniqueLeagueNames(matches, []);
 
     if (!rows.length) {
       return NextResponse.json({
@@ -140,6 +129,7 @@ async function syncMatches(request: Request) {
         leagues,
         leagueCount: leagues.length,
         insertedOrUpdated: 0,
+        analysisGenerated: 0,
       });
     }
 
@@ -149,6 +139,7 @@ async function syncMatches(request: Request) {
       .select("external_id");
 
     if (error) throw new Error(error.message);
+    const analysis = await generateAndSaveFeaturedMatchAnalyses(supabase, matches, rows);
 
     const todayKey = getShanghaiDateKey(new Date().toISOString());
     const now = Date.now();
@@ -168,6 +159,8 @@ async function syncMatches(request: Request) {
       leagues,
       leagueCount: leagues.length,
       insertedOrUpdated: data?.length ?? rows.length,
+      analysisGenerated: analysis.generated,
+      analysisFailed: analysis.failed,
     });
   } catch (error: unknown) {
     console.error("Cron match sync failed:", error);

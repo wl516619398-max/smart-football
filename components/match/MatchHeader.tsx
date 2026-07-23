@@ -18,7 +18,7 @@ export function MatchHeader({ match }: MatchHeaderProps) {
           </Link>
           <div className="flex items-center gap-2">
             <FavoriteButton matchId={match.id} />
-            <ShareButton />
+            <ShareButton matchId={match.id} />
           </div>
         </div>
         <div className="mt-8 text-center">

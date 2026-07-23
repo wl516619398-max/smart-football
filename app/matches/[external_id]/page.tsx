@@ -16,7 +16,6 @@ import { calculateFootballStrengthRating } from "@/lib/football/rating";
 import { getTeamRecentStats } from "@/lib/football/stats";
 import { predictMatch as predictFromTeamStats } from "@/lib/prediction/engine";
 import type { PredictionTeamStats } from "@/lib/prediction/types";
-import { PredictionEngineCard } from "@/components/match/PredictionEngineCard";
 import { AthenaReportCard } from "@/components/match/AthenaReportCard";
 import { getFixtureOdds } from "@/lib/football/odds";
 import { calculateOddsValue } from "@/lib/odds/value-engine";
@@ -31,6 +30,11 @@ import { MatchResearchInsights } from "@/components/match/MatchResearchInsights"
 import { DataSourceCard } from "@/components/match/DataSourceCard";
 import { getTeamDisplayName } from "@/lib/football/team-name-map";
 import { getAiMatchAnalysis } from "@/lib/db/ai-match-analysis";
+import { decodeUnicode, decodeUnicodeDeep } from "@/lib/utils/decode-unicode";
+import { analyzeMatch } from "@/lib/analysis-engine";
+import type { MatchData } from "@/lib/data-provider/types";
+import { MatchAnalysisOverview } from "@/components/match/MatchAnalysisOverview";
+import { ShareButton } from "@/components/common/ShareButton";
 
 export const metadata: Metadata = {
   title: "比赛详情 | Project Athena",
@@ -67,13 +71,15 @@ async function getMatchByExternalId(externalId: string): Promise<MatchRow | null
 
     if (!error && data) {
       const row = data as MatchRow;
-      return {
+      return decodeUnicodeDeep({
         ...row,
-        home_team_raw: row.home_team,
-        away_team_raw: row.away_team,
+        league: decodeUnicode(row.league),
+        home_team_raw: decodeUnicode(row.home_team),
+        away_team_raw: decodeUnicode(row.away_team),
         home_team: getTeamDisplayName(row.home_team),
         away_team: getTeamDisplayName(row.away_team),
-      };
+        ai_pick: decodeUnicode(row.ai_pick),
+      });
     }
     if (error) console.error("Failed to load match detail, using football API fallback:", error);
   }
@@ -81,13 +87,15 @@ async function getMatchByExternalId(externalId: string): Promise<MatchRow | null
   const fixture = await getFixtureDetail(externalId);
   if (!fixture) return null;
   const row = footballMatchToMatchCenterRow(fixture) as MatchRow;
-  return {
+  return decodeUnicodeDeep({
     ...row,
-    home_team_raw: row.home_team,
-    away_team_raw: row.away_team,
+    league: decodeUnicode(row.league),
+    home_team_raw: decodeUnicode(row.home_team),
+    away_team_raw: decodeUnicode(row.away_team),
     home_team: getTeamDisplayName(row.home_team),
     away_team: getTeamDisplayName(row.away_team),
-  };
+    ai_pick: decodeUnicode(row.ai_pick),
+  });
 }
 
 function formatMatchTime(value: string | null) {
@@ -110,6 +118,12 @@ function probability(value: number | null) {
   return value === null || !Number.isFinite(value) ? "--" : `${Math.round(value)}%`;
 }
 
+function confidenceLevel(value: number) {
+  if (value >= 75) return "\u9ad8";
+  if (value >= 50) return "\u4e2d";
+  return "\u4f4e";
+}
+
 function teamInitial(name: string) {
   return name.trim().slice(0, 1) || "?";
 }
@@ -118,22 +132,46 @@ function toPredictionStats(attack: number, defense: number, form: number, homeAd
   return { attack, defense, form, homeAdvantage };
 }
 
-async function getEnginePrediction() {
+async function getEnginePrediction(match: MatchRow) {
   try {
+    const homeTeamId = String(match.home_team_id ?? "33");
+    const awayTeamId = String(match.away_team_id ?? "40");
     const [homeStats, awayStats] = await Promise.all([
-      getTeamRecentStats("33"),
-      getTeamRecentStats("40"),
+      getTeamRecentStats(homeTeamId),
+      getTeamRecentStats(awayTeamId),
     ]);
     const homeRating = calculateFootballStrengthRating(homeStats);
     const awayRating = calculateFootballStrengthRating(awayStats);
     const homeTeamStats = toPredictionStats(homeRating.attackScore, homeRating.defenseScore, homeRating.formScore, 90);
     const awayTeamStats = toPredictionStats(awayRating.attackScore, awayRating.defenseScore, awayRating.formScore, 50);
+    const matchData: MatchData = {
+      match_id: match.external_id,
+      league: match.league ?? "",
+      home_team: { id: homeTeamId, name: match.home_team ?? "主队" },
+      away_team: { id: awayTeamId, name: match.away_team ?? "客队" },
+      match_time: match.match_time ?? "",
+      home_team_stats: { attack: homeRating.attackScore, defense: homeRating.defenseScore, form: homeRating.formScore, homeAdvantage: 90, possession: 50, goalsFor: homeStats.goals.scored, goalsAgainst: homeStats.goals.conceded, xG: homeStats.goals.scored / Math.max(1, homeStats.recentMatches.length), rank: 20 },
+      away_team_stats: { attack: awayRating.attackScore, defense: awayRating.defenseScore, form: awayRating.formScore, homeAdvantage: 50, possession: 50, goalsFor: awayStats.goals.scored, goalsAgainst: awayStats.goals.conceded, xG: awayStats.goals.scored / Math.max(1, awayStats.recentMatches.length), rank: 20 },
+      recent_form: { home: homeStats.recentMatches, away: awayStats.recentMatches },
+      head_to_head: { matches: [], home_wins: 0, draws: 0, away_wins: 0 },
+      odds: { home: 0, draw: 0, away: 0 },
+      injuries: [],
+    };
+    const unifiedPrediction = analyzeMatch(matchData);
+    const [expectedHome, expectedAway] = unifiedPrediction.expected_score.split("-").map((value) => Number(value) || 0);
     return {
       homeTeamStats,
       awayTeamStats,
       homeRating,
       awayRating,
-      prediction: predictFromTeamStats(homeTeamStats, awayTeamStats),
+      prediction: {
+        homeWin: unifiedPrediction.home_win_probability,
+        draw: unifiedPrediction.draw_probability,
+        awayWin: unifiedPrediction.away_win_probability,
+        confidence: unifiedPrediction.confidence,
+        expectedGoals: { home: expectedHome, away: expectedAway },
+        recommendation: [unifiedPrediction.recommended_pick, ...unifiedPrediction.key_factors],
+      },
     };
   } catch (error) {
     console.error("Failed to build team prediction:", error instanceof Error ? error.message : String(error));
@@ -173,7 +211,7 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
   if (!match) notFound();
   const analysisHomeTeam = match.home_team || "涓婚槦";
   const analysisAwayTeam = match.away_team || "瀹㈤槦";
-  const analysisData = await getMatchAnalysisData(externalId, match);
+  const analysisData = decodeUnicodeDeep(await getMatchAnalysisData(externalId, match));
   console.info("[match-detail] analysis response fields", {
     externalId,
     recentHomeKeys: Object.keys(analysisData.recent.home),
@@ -183,11 +221,12 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
     headToHeadKeys: Object.keys(analysisData.headToHead),
     headToHeadMatches: analysisData.headToHead.matches.length,
   });
-  const [engineContext, fixtureOdds, storedAiAnalysis] = await Promise.all([
-    getEnginePrediction(),
+  const [engineContext, fixtureOdds, rawStoredAiAnalysis] = await Promise.all([
+    getEnginePrediction(match),
     getFixtureOdds(externalId),
     getAiMatchAnalysis(externalId),
   ]);
+  const storedAiAnalysis = decodeUnicodeDeep(rawStoredAiAnalysis);
   const oddsValue = calculateOddsValue({
     prediction: {
       homeWin: engineContext.prediction.homeWin,
@@ -200,6 +239,10 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
       away: fixtureOdds.away.odds,
     },
   });
+  const storedContent = (storedAiAnalysis?.analysis ?? {}) as Record<string, unknown>;
+  const storedScoreProbabilities = Array.isArray(storedContent.scoreProbabilities)
+    ? storedContent.scoreProbabilities.filter((item): item is { score: string; probability: number } => Boolean(item && typeof item === "object" && typeof (item as Record<string, unknown>).score === "string" && typeof (item as Record<string, unknown>).probability === "number"))
+    : [];
   await savePredictionHistory({
     match_id: externalId,
     home_team: analysisHomeTeam,
@@ -207,6 +250,18 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
     prediction: engineContext.prediction.recommendation[0] ?? "双方数据接近",
     confidence: engineContext.prediction.confidence,
     odds_value: Math.max(oddsValue.value.home, oddsValue.value.draw, oddsValue.value.away),
+    match_time: match.match_time,
+    home_win_probability: engineContext.prediction.homeWin,
+    draw_probability: engineContext.prediction.draw,
+    away_win_probability: engineContext.prediction.awayWin,
+    score_probabilities: storedScoreProbabilities,
+    goals_prediction: typeof storedAiAnalysis?.goal_prediction === "string" ? storedAiAnalysis.goal_prediction : typeof storedContent.goal_prediction === "string" ? storedContent.goal_prediction : `预计进球 ${engineContext.prediction.expectedGoals.home.toFixed(1)} - ${engineContext.prediction.expectedGoals.away.toFixed(1)}`,
+    risk_level: typeof storedContent.risk_level === "string" ? storedContent.risk_level : null,
+    actual_score: null,
+    actual_result: null,
+    prediction_hit: null,
+    goals_prediction_hit: null,
+    score_top3_hit: null,
   });
   const expertAnalysis = { recommendation: { risk: storedAiAnalysis?.risk_warning ?? "AI分析将在赛前生成" } };
   const homeTeam = match.home_team || "主队";
@@ -220,11 +275,24 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
     `风险提示：${expertAnalysis.recommendation.risk}`,
     `AI判断可信度：${engineContext.prediction.confidence}%`,
   ].join("\n");
+  const recommendationReasons = [
+    `${homeTeam} \u4e3b\u80dc\u6982\u7387 ${probability(engineContext.prediction.homeWin)}，${homeTeam} \u4e3b\u573a\u6761\u4ef6\u5df2\u7eb3\u5165\u6a21\u578b\u8bc4\u4f30。`,
+    `\u9884\u671f\u8fdb\u7403 ${engineContext.prediction.expectedGoals.home.toFixed(2)} : ${engineContext.prediction.expectedGoals.away.toFixed(2)}，\u653b\u9632\u5dee\u5f02\u652f\u6301\u5f53\u524d\u6a21\u578b\u89c2\u70b9\u3002`,
+    engineContext.prediction.recommendation[1] || "\u8fd1\u671f\u72b6\u6001\u3001\u653b\u9632\u6307\u6807\u4e0e\u4e3b\u5ba2\u573a\u56e0\u7d20\u7efc\u5408\u53c2\u8003\u3002",
+  ];
+  const riskFactors = [
+    `\u5e73\u5c40\u6982\u7387 ${probability(engineContext.prediction.draw)}，\u53cc\u65b9\u4ecd\u5b58\u5728\u76f8\u6301\u65f6\u6bb5\u3002`,
+    Math.abs(engineContext.prediction.expectedGoals.home - engineContext.prediction.expectedGoals.away) < 0.35 ? "\u53cc\u65b9\u9884\u671f\u8fdb\u7403\u63a5\u8fd1，\u6bd4\u8d5b\u8d70\u52bf\u53ef\u80fd\u53d7\u4e34\u573a\u7ec6\u8282\u5f71\u54cd\u3002" : "\u6bd4\u8d5b\u8fdb\u7a0b\u4e0e\u4e34\u573a\u9635\u5bb9\u53ef\u80fd\u6539\u53d8\u653b\u9632\u5e73\u8861\u3002",
+    "\u7ed3\u8bba\u57fa\u4e8e\u5f53\u524d\u53ef\u83b7\u6570\u636e，\u9996\u53d1\u3001\u4f24\u505c\u4e0e\u4e34\u573a\u4fe1\u606f\u4ecd\u9700\u8d5b\u524d\u6838\u5bf9\u3002",
+  ];
   return (
     <main className="mx-auto min-h-[calc(100vh-140px)] w-full max-w-6xl px-4 py-8 text-slate-100 sm:px-6 lg:px-8">
+      <div className="flex items-center justify-between gap-3">
       <Link href="/matches" className="inline-flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white">
         <ArrowLeft className="h-4 w-4" /> 返回比赛列表
       </Link>
+      <ShareButton matchId={externalId} />
+      </div>
 
       <section className="relative mt-6 overflow-hidden rounded-2xl border border-blue-500/20 bg-gradient-to-br from-[#111827] via-[#111d3a] to-[#111827] p-5 shadow-xl shadow-blue-950/20 sm:p-8">
         <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-blue-500/15 blur-[90px]" />
@@ -246,9 +314,44 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
               <span className="text-xs text-slate-500">客队</span>
             </div>
           </div>
+          <div className="mt-7 grid gap-3 border-t border-blue-400/15 pt-5 sm:grid-cols-[1.4fr_1fr_1fr]">
+            <div className="grid grid-cols-3 gap-2 rounded-xl border border-blue-400/15 bg-slate-950/30 p-3 text-center">
+              <div><p className="text-[10px] text-slate-500">{`\u4e3b\u80dc`}</p><p className="mt-1 text-lg font-semibold text-blue-300">{probability(engineContext.prediction.homeWin)}</p></div>
+              <div><p className="text-[10px] text-slate-500">{`\u5e73\u5c40`}</p><p className="mt-1 text-lg font-semibold text-slate-200">{probability(engineContext.prediction.draw)}</p></div>
+              <div><p className="text-[10px] text-slate-500">{`\u5ba2\u80dc`}</p><p className="mt-1 text-lg font-semibold text-emerald-300">{probability(engineContext.prediction.awayWin)}</p></div>
+            </div>
+            <div className="rounded-xl border border-blue-400/15 bg-blue-500/5 p-3 text-center">
+              <p className="text-[10px] text-slate-500">{`AI\u6a21\u578b\u89c2\u70b9`}</p>
+              <p className="mt-1 truncate text-sm font-semibold text-blue-200">{engineContext.prediction.recommendation[0] || `\u6570\u636e\u540c\u6b65\u4e2d`}</p>
+            </div>
+            <div className="rounded-xl border border-emerald-400/15 bg-emerald-500/5 p-3 text-center">
+              <p className="text-[10px] text-slate-500">{`AI\u5224\u65ad\u53ef\u4fe1\u5ea6`}</p>
+              <p className="mt-1 text-sm font-semibold text-emerald-200">{engineContext.prediction.confidence}% · {confidenceLevel(engineContext.prediction.confidence)}</p>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-3 border-t border-blue-400/15 pt-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-blue-400/15 bg-blue-500/5 p-4">
+              <p className="text-xs font-semibold text-blue-200">AI推荐理由</p>
+              <ul className="mt-3 space-y-2 text-xs leading-5 text-slate-300">{recommendationReasons.map((reason, index) => <li key={`${reason}-${index}`} className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400" />{reason}</li>)}</ul>
+            </div>
+            <div className="rounded-xl border border-amber-400/15 bg-amber-500/5 p-4">
+              <p className="text-xs font-semibold text-amber-200">风险因素</p>
+              <ul className="mt-3 space-y-2 text-xs leading-5 text-slate-300">{riskFactors.map((risk, index) => <li key={`${risk}-${index}`} className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />{risk}</li>)}</ul>
+            </div>
+          </div>
         </div>
       </section>
 
+      <div className="mt-6">
+        <MatchAnalysisOverview
+          homeTeam={homeTeam}
+          awayTeam={awayTeam}
+          prediction={engineContext.prediction}
+          analysis={storedAiAnalysis}
+        />
+      </div>
+
+      <div className="hidden">
       <div className="mt-6">
         <MatchOverview
           homeTeam={homeTeam}
@@ -259,7 +362,6 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
       </div>
 
       <div className="mt-6 space-y-6">
-        <PredictionEngineCard homeTeam={homeTeam} awayTeam={awayTeam} prediction={engineContext.prediction} dataAvailable={engineContext.homeRating.dataAvailable && engineContext.awayRating.dataAvailable} />
         <div className="grid gap-6 lg:grid-cols-2">
           <ProbabilityChart prediction={engineContext.prediction} />
           <TeamComparison
@@ -314,6 +416,7 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
       <div className="mt-6 space-y-6">
         <RecentFormOverview homeTeam={homeTeam} awayTeam={awayTeam} home={analysisData.recent.home} away={analysisData.recent.away} />
         <HeadToHeadOverview homeTeam={homeTeam} awayTeam={awayTeam} data={analysisData.headToHead} />
+      </div>
       </div>
 
       <div className="mt-6"><DataSourceCard generatedAt={new Date().toISOString()} /></div>

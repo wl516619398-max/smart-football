@@ -8,7 +8,8 @@ function normalizeProvider(value: string | undefined): FootballProviderKind {
 
   // An explicit mock setting must win even when an API adapter is configured.
   if (normalized === "mock") return "mock";
-  if (normalized === "api" || normalized === "database" || normalized === "external") {
+  if (normalized === "api" || normalized === "api-football") return "api";
+  if (normalized === "database" || normalized === "external") {
     return normalized;
   }
 
@@ -20,7 +21,9 @@ export function getFootballApiAdapter(
   provider?: FootballProviderKind,
   source?: RealFootballProviderName,
 ): FootballApiAdapter {
-  const selectedProvider = provider ?? normalizeProvider(process.env.FOOTBALL_DATA_PROVIDER);
+  const selectedProvider = provider === "api-football"
+    ? "api"
+    : provider ?? normalizeProvider(process.env.FOOTBALL_DATA_PROVIDER);
 
   switch (selectedProvider) {
     case "api":

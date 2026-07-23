@@ -47,8 +47,8 @@ function teamStats(team: string, teamId: string, recentMatches: RecentMatch[], a
 
 const analysisData: MatchAnalysisData = {
   recent: {
-    home: { matches: homeRecent, wins: 3, draws: 2, losses: 0, goalsFor: 9, goalsAgainst: 4, trend: homeRecent.map((match) => match.result) },
-    away: { matches: awayRecent, wins: 2, draws: 2, losses: 1, goalsFor: 8, goalsAgainst: 7, trend: awayRecent.map((match) => match.result) },
+    home: { matches: homeRecent, wins: 3, draws: 2, losses: 0, goalsFor: 9, goalsAgainst: 4, form: "WDLWW", trend: homeRecent.map((match) => match.result) },
+    away: { matches: awayRecent, wins: 2, draws: 2, losses: 1, goalsFor: 8, goalsAgainst: 7, form: "WWDLD", trend: awayRecent.map((match) => match.result) },
   },
   headToHead: {
     matches: [

@@ -129,7 +129,8 @@ async function requestJson(url: string, headers?: HeadersInit): Promise<unknown 
     const response = await fetch(url, { headers, cache: "no-store" });
     if (!response.ok) return null;
     return await response.json();
-  } catch {
+  } catch (error) {
+    console.log("API REQUEST ERROR:", error);
     return null;
   }
 }
@@ -225,13 +226,19 @@ function apiFootballTeam(team: RecordValue | null, fallbackId: string): Football
 
 function createApiFootballSource(): RealFootballSource | null {
   const key = process.env.FOOTBALL_API_KEY?.trim();
+  console.log("API KEY LENGTH:", process.env.FOOTBALL_API_KEY?.length);
   if (!key) return null;
-  const base = (process.env.FOOTBALL_API_BASE_URL || "https://v3.football.api-sports.io").replace(/\/$/, "");
+  const base = (process.env.FOOTBALL_API_URL || process.env.FOOTBALL_API_BASE_URL || "https://v3.football.api-sports.io").replace(/\/$/, "");
   const headers = { Accept: "application/json", "x-apisports-key": key };
 
   async function request(path: string, params: Record<string, string | number>) {
     const url = new URL(`${base}/${path.replace(/^\//, "")}`);
     Object.entries(params).forEach(([name, value]) => url.searchParams.set(name, String(value)));
+    console.log("API URL:", url.toString());
+    console.log("HEADERS:", {
+      "x-apisports-key-exists": Boolean(key),
+      "key-length": key?.length,
+    });
     const payload = asRecord(await requestJson(url.toString(), headers));
     const errors = payload?.errors;
     if (errors && (Array.isArray(errors) ? errors.length : Object.keys(asRecord(errors) || {}).length)) return null;
@@ -241,6 +248,28 @@ function createApiFootballSource(): RealFootballSource | null {
   return {
     name: "api-football",
     async getUpcomingMatches(query) {
+      if (query?.matchId) {
+        const response = await request("fixtures", { id: query.matchId });
+        const normalized = (response || []).map((item) => {
+          const fixture = asRecord(item);
+          const fixtureInfo = readRecord(fixture, "fixture");
+          const league = readRecord(fixture, "league");
+          const teams = readRecord(fixture, "teams");
+          const home = apiFootballTeam(readRecord(teams, "home"), "home");
+          const away = apiFootballTeam(readRecord(teams, "away"), "away");
+          return createMatch({
+            id: readString(fixtureInfo, "id"),
+            league: readString(league, "name"),
+            date: readString(fixtureInfo, "date"),
+            status: readString(readRecord(fixtureInfo, "status"), "short"),
+            venue: readString(readRecord(fixtureInfo, "venue"), "name"),
+            home,
+            away,
+          });
+        }).filter((match) => match.id && match.homeTeam.name !== "寰呯‘璁?" && match.awayTeam.name !== "寰呯‘璁?");
+        return normalized.length ? normalized : null;
+      }
+
       // API-Football free plans do not allow the `next` parameter. Requesting
       // each date also keeps this adapter compatible with the free plan's
       // limited forward-looking date window.

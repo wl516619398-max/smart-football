@@ -105,7 +105,7 @@ export async function POST(request: Request) {
       goal_prediction: result.data.goal_prediction,
       risk_warning: result.data.risk_warning,
       odds_value_analysis: result.data.odds_value_analysis,
-      confidence: result.data.confidence,
+      confidence_score: result.data.confidence,
     });
     return NextResponse.json({ success: true, data: saved, generated: true }, { status: 200 });
   } catch (error) {

@@ -2,7 +2,8 @@ import { getMatchById } from "@/data/matches";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { HeadToHeadMatch, MatchAnalysisData, MatchFocusFactor, MatchMetric, MatchRecentStats, MatchTeam, RecentMatch } from "@/types/match";
 import { getTeamDisplayName } from "@/lib/football/team-name-map";
-import { getHistoricalHeadToHead, getHistoricalTeamMatches, resolveFootballTeamId } from "@/lib/football/history";
+import { calculateRecentForm, getHistoricalTeamMatches, getStoredHeadToHead, resolveFootballTeamId } from "@/lib/football/history";
+import { decodeUnicode, decodeUnicodeDeep } from "@/lib/utils/decode-unicode";
 
 type DatabaseMatchRow = Record<string, unknown>;
 
@@ -77,8 +78,8 @@ function teamMatches(row: DatabaseMatchRow, side: "home" | "away", teamId?: stri
 }
 
 function recentFromRow(row: DatabaseMatchRow, team: string, teamId?: string): RecentMatch | null {
-  const home = text(row.home_team ?? row.homeTeam);
-  const away = text(row.away_team ?? row.awayTeam);
+  const home = decodeUnicode(text(row.home_team ?? row.homeTeam));
+  const away = decodeUnicode(text(row.away_team ?? row.awayTeam));
   const score = scoreFor(row);
   const homeMatches = teamMatches(row, "home", teamId);
   const awayMatches = teamMatches(row, "away", teamId);
@@ -105,9 +106,23 @@ function summarize(items: RecentMatch[]): MatchRecentStats {
     summary.losses += item.result === "loss" ? 1 : 0;
     summary.goalsFor += Number.isFinite(goalsFor) ? goalsFor : 0;
     summary.goalsAgainst += Number.isFinite(goalsAgainst) ? goalsAgainst : 0;
+    summary.form += item.result === "win" ? "W" : item.result === "draw" ? "D" : "L";
     summary.trend.push(item.result);
     return summary;
-  }, { matches: [], wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0, trend: [] });
+  }, { matches: [], wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0, form: "", trend: [] });
+}
+
+function applyCalculatedForm(stats: MatchRecentStats, calculated: Awaited<ReturnType<typeof calculateRecentForm>> | null) {
+  if (!calculated || !stats.matches.length) return stats;
+  return {
+    ...stats,
+    wins: calculated.wins,
+    draws: calculated.draws,
+    losses: calculated.losses,
+    goalsFor: calculated.goalsFor,
+    goalsAgainst: calculated.goalsAgainst,
+    form: calculated.form || stats.form,
+  } satisfies MatchRecentStats;
 }
 
 function fallbackRecent(team: "home" | "away", fallback: ReturnType<typeof getMatchById>) {
@@ -187,6 +202,7 @@ function createFocusFactors(row: DatabaseMatchRow, fallback: ReturnType<typeof g
 }
 
 export async function getMatchAnalysisData(externalId: string, currentRow: DatabaseMatchRow): Promise<MatchAnalysisData> {
+  currentRow = decodeUnicodeDeep(currentRow);
   const fallback = getMatchById(externalId);
   let rows: DatabaseMatchRow[] = [];
   const supabase = getSupabaseServerClient();
@@ -194,7 +210,7 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
   if (supabase) {
     try {
       const result = await supabase.from("matches").select("*").order("match_time", { ascending: false }).limit(1000);
-      if (!result.error && Array.isArray(result.data)) rows = result.data as DatabaseMatchRow[];
+      if (!result.error && Array.isArray(result.data)) rows = decodeUnicodeDeep(result.data as DatabaseMatchRow[]);
     } catch {
       rows = [];
     }
@@ -244,7 +260,9 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
         data: historyResult.data,
         error: historyResult.error,
       });
-      if (!historyResult.error && Array.isArray(historyResult.data)) historyRows = historyResult.data as DatabaseMatchRow[];
+      if (!historyResult.error && Array.isArray(historyResult.data)) {
+        historyRows = decodeUnicodeDeep(historyResult.data as DatabaseMatchRow[]);
+      }
     } catch (error) {
       console.log("[match-analysis] football_match_history query error", error);
       historyRows = [];
@@ -259,6 +277,10 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
   const awayTeamId = awayFootballDataId ?? undefined;
   const homeDatabaseForm = historicalRows.map((row) => recentFromRow(row, homeMatchName, homeTeamId)).filter((item): item is RecentMatch => Boolean(item)).slice(0, 5);
   const awayDatabaseForm = historicalRows.map((row) => recentFromRow(row, awayMatchName, awayTeamId)).filter((item): item is RecentMatch => Boolean(item)).slice(0, 5);
+  const [homeCalculatedForm, awayCalculatedForm] = await Promise.all([
+    homeTeamId ? calculateRecentForm(homeTeamId) : Promise.resolve(null),
+    awayTeamId ? calculateRecentForm(awayTeamId) : Promise.resolve(null),
+  ]);
   let homeApiForm: RecentMatch[] = [];
   let awayApiForm: RecentMatch[] = [];
   try {
@@ -290,38 +312,31 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
   }
   const homeRecent = homeDatabaseForm.length ? homeDatabaseForm : homeApiForm.length ? homeApiForm : [];
   const awayRecent = awayDatabaseForm.length ? awayDatabaseForm : awayApiForm.length ? awayApiForm : [];
-  const recent = { home: summarize(homeRecent), away: summarize(awayRecent) };
+  const recent = {
+    home: applyCalculatedForm(summarize(homeRecent), homeCalculatedForm),
+    away: applyCalculatedForm(summarize(awayRecent), awayCalculatedForm),
+  };
   console.log("[match-analysis] recent lengths", {
     externalId,
     recentHomeLength: recent.home.matches.length,
     recentAwayLength: recent.away.matches.length,
   });
 
-  const databaseH2H = historicalRows.filter((row) => {
-    const rowHomeId = normalizedId(row.home_team_id ?? row.homeTeamId);
-    const rowAwayId = normalizedId(row.away_team_id ?? row.awayTeamId);
-    const hasComparableIds = Boolean(homeTeamId && awayTeamId && rowHomeId && rowAwayId);
-    const directIdMatch = hasComparableIds && rowHomeId === homeTeamId && rowAwayId === awayTeamId;
-    const reversedIdMatch = hasComparableIds && rowHomeId === awayTeamId && rowAwayId === homeTeamId;
-    return Boolean(scoreFor(row) && (directIdMatch || reversedIdMatch));
-  }).slice(0, 10).map((row): HeadToHeadMatch => ({ home: getTeamDisplayName(text(row.home_team)), away: getTeamDisplayName(text(row.away_team)), score: scoreFor(row)?.value ?? "-", date: text(row.match_time).slice(0, 10) }));
-  let apiH2H: HeadToHeadMatch[] = [];
-  if (!databaseH2H.length) {
-    try {
-      const [resolvedHomeTeamId, resolvedAwayTeamId] = [homeFootballDataId, awayFootballDataId];
-      if (resolvedHomeTeamId && resolvedAwayTeamId) {
-        apiH2H = (await getHistoricalHeadToHead(resolvedHomeTeamId, resolvedAwayTeamId)).map((item) => ({
-          home: getTeamDisplayName(item.homeTeam),
-          away: getTeamDisplayName(item.awayTeam),
-          score: `${item.homeScore}:${item.awayScore}`,
-          date: item.matchTime.slice(0, 10),
-        }));
-      }
-    } catch {
-      apiH2H = [];
-    }
-  }
-  const h2hMatches = databaseH2H.length ? databaseH2H : apiH2H;
+  const storedHeadToHeadRows = homeTeamId && awayTeamId
+    ? await getStoredHeadToHead(homeTeamId, awayTeamId)
+    : [];
+  const h2hMatches = storedHeadToHeadRows
+    .map((row): HeadToHeadMatch | null => {
+      const score = scoreFor(row);
+      if (!score) return null;
+      return {
+        home: getTeamDisplayName(text(row.home_team ?? row.homeTeam)),
+        away: getTeamDisplayName(text(row.away_team ?? row.awayTeam)),
+        score: score.value,
+        date: text(row.match_time ?? row.date).slice(0, 10),
+      };
+    })
+    .filter((item): item is HeadToHeadMatch => Boolean(item));
   const h2hSummary = h2hMatches.reduce((summary, item) => {
     const [homeScore, awayScore] = item.score.split(":").map(Number);
     const homeWon = sameTeam(item.home, homeMatchName) ? homeScore > awayScore : awayScore > homeScore;
@@ -345,5 +360,5 @@ export async function getMatchAnalysisData(externalId: string, currentRow: Datab
     },
     headToHead: { count: headToHead.matches.length, homeWins: headToHead.homeWins, draws: headToHead.draws, awayWins: headToHead.awayWins, fields: Object.keys(headToHead) },
   });
-  return { recent, headToHead, metrics, focusFactors: createFocusFactors(currentRow, fallback, recent, headToHead, aiScore) };
+  return decodeUnicodeDeep({ recent, headToHead, metrics, focusFactors: createFocusFactors(currentRow, fallback, recent, headToHead, aiScore) });
 }
