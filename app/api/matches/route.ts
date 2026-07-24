@@ -42,7 +42,7 @@ export async function GET(request: Request) {
   try {
     let query = supabase
       .from("matches")
-      .select("id,external_id,league,home_team,away_team,match_time,home_logo,away_logo", { count: "exact" })
+      .select("id,external_id,league,home_team,away_team,match_time,home_logo,away_logo,home_win,draw,away_win,ai_score,ai_pick,risk_level", { count: "exact" })
       .order("match_time", { ascending: true });
 
     if (date) {
@@ -67,7 +67,25 @@ export async function GET(request: Request) {
       throw new Error(error.message);
     }
 
-    const rows = data ?? [];
+    const rows = (data ?? []).map((row) => ({
+      id: row.id ?? row.external_id,
+      league: row.league,
+      home_team: row.home_team,
+      away_team: row.away_team,
+      match_time: row.match_time,
+      home_logo: row.home_logo ?? null,
+      away_logo: row.away_logo ?? null,
+      home_win: row.home_win ?? null,
+      draw: row.draw ?? null,
+      away_win: row.away_win ?? null,
+      home_win_probability: row.home_win ?? null,
+      draw_probability: row.draw ?? null,
+      away_win_probability: row.away_win ?? null,
+      ai_consistency: null,
+      ai_score: row.ai_score ?? null,
+      ai_pick: row.ai_pick ?? null,
+      risk_level: row.risk_level ?? null,
+    }));
     const total = count ?? rows.length;
     console.info("[api/matches] result", { count: rows.length, total });
 
