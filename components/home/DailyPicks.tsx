@@ -32,7 +32,7 @@ function valueLabel(value: number) { return value >= 0.05 ? "高价值" : value 
 function valueTone(value: number) { return value >= 0.05 ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300" : value >= -0.05 ? "border-slate-700 bg-slate-900/60 text-slate-300" : "border-amber-500/25 bg-amber-500/10 text-amber-300"; }
 
 function toPickInput(match: SyncedHomeMatch | FeaturedMatch) {
-  if ("external_id" in match) {
+  if ("home_team" in match) {
     return { id: match.external_id, league: match.league, homeTeam: getTeamDisplayName(match.home_team), awayTeam: getTeamDisplayName(match.away_team), matchTime: match.match_time, homeWin: match.home_win, draw: match.draw, awayWin: match.away_win, confidence: match.ai_score };
   }
   return { id: match.id, league: match.league, homeTeam: getTeamDisplayName(match.homeTeam.name), awayTeam: getTeamDisplayName(match.awayTeam.name), matchTime: `${match.date}T${match.time}:00+08:00`, homeWin: match.homeWin, draw: match.draw, awayWin: match.awayWin, confidence: match.aiScore };

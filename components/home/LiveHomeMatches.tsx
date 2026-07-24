@@ -104,7 +104,7 @@ function toHomeMatchData(match: SyncedHomeMatch, index: number): HomeMatchData {
 }
 
 function toFeaturedMatch(match: HomeMatchData): FeaturedMatchData {
-  return decodeUnicodeDeep({ id: match.id, league: match.league, date: match.date, time: match.time, homeTeam: match.homeTeam, awayTeam: match.awayTeam, aiScore: match.aiConfidence, prediction: match.recommendation, score: match.scorePrediction, goalTrend: match.goalTrend, matchStatus: match.matchStatus, risk: match.risk, homeWin: match.homeProbability, draw: match.drawProbability, awayWin: match.awayProbability, analysisStatus: match.analysisStatus });
+  return decodeUnicodeDeep({ id: match.id, external_id: match.id, league: match.league, date: match.date, time: match.time, homeTeam: match.homeTeam, awayTeam: match.awayTeam, aiScore: match.aiConfidence, prediction: match.recommendation, score: match.scorePrediction, goalTrend: match.goalTrend, matchStatus: match.matchStatus, risk: match.risk, homeWin: match.homeProbability, draw: match.drawProbability, awayWin: match.awayProbability, analysisStatus: match.analysisStatus });
 }
 
 export function LiveHomeMatchesLoading() {

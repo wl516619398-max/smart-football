@@ -34,9 +34,11 @@ export function MatchCard({ match, compact = false }: { match: FeaturedMatch; co
     uncertainty: decodeUnicode("\\u6570\\u636e\\u4e0d\\u786e\\u5b9a\\u6027"),
     syncing: decodeUnicode("\\u6570\\u636e\\u540c\\u6b65\\u4e2d"),
     viewAnalysis: decodeUnicode("\\u67e5\\u770b\\u5206\\u6790"),
+    missingId: decodeUnicode("\\u6bd4\\u8d5b ID \\u7f3a\\u5931，\\u6682\\u65e0\\u6cd5\\u8df3\\u8f6c"),
   };
   const aiScore = match.aiScore === null ? labels.syncing : `${match.aiScore}%`;
   const aiConsistency = match.aiConsistency === null || match.aiConsistency === undefined ? labels.syncing : `${match.aiConsistency}%`;
+  const externalId = match.external_id?.trim() || null;
 
   return (
     <Card className={cn("group overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-500/40 hover:shadow-glow", compact ? "" : "h-full")}>
@@ -59,7 +61,7 @@ export function MatchCard({ match, compact = false }: { match: FeaturedMatch; co
       </div>
       <div className="flex items-center justify-between gap-3 bg-slate-900/40 px-4 py-3">
         <span className="flex min-w-0 items-center gap-1.5 text-xs text-slate-300"><Sparkles className="h-3.5 w-3.5 shrink-0 text-amber-400" /><span className="truncate">AI评分 {aiScore} · AI一致性 {aiConsistency} · {prediction}</span></span>
-        <Link href={`/matches/${encodeURIComponent(match.id)}`} className="flex shrink-0 items-center gap-1 text-xs text-blue-400 opacity-80 transition-opacity group-hover:opacity-100">{labels.viewAnalysis} <ArrowRight className="h-3 w-3" /></Link>
+        {externalId ? <Link href={`/matches/${encodeURIComponent(externalId)}`} className="flex shrink-0 items-center gap-1 text-xs text-blue-400 opacity-80 transition-opacity group-hover:opacity-100">{labels.viewAnalysis} <ArrowRight className="h-3 w-3" /></Link> : <span className="flex shrink-0 items-center gap-1 text-[10px] text-amber-400/80">{labels.missingId}</span>}
       </div>
     </Card>
   );

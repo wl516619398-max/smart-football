@@ -33,8 +33,8 @@ import { getAiMatchAnalysis } from "@/lib/db/ai-match-analysis";
 import { decodeUnicode, decodeUnicodeDeep } from "@/lib/utils/decode-unicode";
 import { analyzeMatch } from "@/lib/analysis-engine";
 import type { MatchData } from "@/lib/data-provider/types";
-import { MatchAnalysisOverview } from "@/components/match/MatchAnalysisOverview";
 import { ShareButton } from "@/components/common/ShareButton";
+import { MatchAnalysisPanel } from "@/components/matches/MatchAnalysisPanel";
 
 export const metadata: Metadata = {
   title: "比赛详情 | Project Athena",
@@ -55,6 +55,7 @@ type MatchRow = {
   away_win: number | null;
   ai_score: number | null;
   ai_pick?: string | null;
+  risk_level?: string | null;
   ai_analysis?: string | null;
   home_team_id?: string | number | null;
   away_team_id?: string | number | null;
@@ -226,6 +227,14 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
     getFixtureOdds(externalId),
     getAiMatchAnalysis(externalId),
   ]);
+  const displayPrediction = {
+    ...engineContext.prediction,
+    homeWin: match.home_win ?? engineContext.prediction.homeWin,
+    draw: match.draw ?? engineContext.prediction.draw,
+    awayWin: match.away_win ?? engineContext.prediction.awayWin,
+    confidence: match.ai_score ?? engineContext.prediction.confidence,
+    recommendation: [decodeUnicode(match.ai_pick ?? ""), ...engineContext.prediction.recommendation].filter(Boolean),
+  };
   const storedAiAnalysis = decodeUnicodeDeep(rawStoredAiAnalysis);
   const oddsValue = calculateOddsValue({
     prediction: {
@@ -316,13 +325,13 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
           </div>
           <div className="mt-7 grid gap-3 border-t border-blue-400/15 pt-5 sm:grid-cols-[1.4fr_1fr_1fr]">
             <div className="grid grid-cols-3 gap-2 rounded-xl border border-blue-400/15 bg-slate-950/30 p-3 text-center">
-              <div><p className="text-[10px] text-slate-500">{`\u4e3b\u80dc`}</p><p className="mt-1 text-lg font-semibold text-blue-300">{probability(engineContext.prediction.homeWin)}</p></div>
-              <div><p className="text-[10px] text-slate-500">{`\u5e73\u5c40`}</p><p className="mt-1 text-lg font-semibold text-slate-200">{probability(engineContext.prediction.draw)}</p></div>
-              <div><p className="text-[10px] text-slate-500">{`\u5ba2\u80dc`}</p><p className="mt-1 text-lg font-semibold text-emerald-300">{probability(engineContext.prediction.awayWin)}</p></div>
+              <div><p className="text-[10px] text-slate-500">{`\u4e3b\u80dc`}</p><p className="mt-1 text-lg font-semibold text-blue-300">{probability(displayPrediction.homeWin)}</p></div>
+              <div><p className="text-[10px] text-slate-500">{`\u5e73\u5c40`}</p><p className="mt-1 text-lg font-semibold text-slate-200">{probability(displayPrediction.draw)}</p></div>
+              <div><p className="text-[10px] text-slate-500">{`\u5ba2\u80dc`}</p><p className="mt-1 text-lg font-semibold text-emerald-300">{probability(displayPrediction.awayWin)}</p></div>
             </div>
             <div className="rounded-xl border border-blue-400/15 bg-blue-500/5 p-3 text-center">
               <p className="text-[10px] text-slate-500">{`AI\u6a21\u578b\u89c2\u70b9`}</p>
-              <p className="mt-1 truncate text-sm font-semibold text-blue-200">{engineContext.prediction.recommendation[0] || `\u6570\u636e\u540c\u6b65\u4e2d`}</p>
+              <p className="mt-1 truncate text-sm font-semibold text-blue-200">{displayPrediction.recommendation[0] || `\u6570\u636e\u540c\u6b65\u4e2d`}</p>
             </div>
             <div className="rounded-xl border border-emerald-400/15 bg-emerald-500/5 p-3 text-center">
               <p className="text-[10px] text-slate-500">{`AI\u5224\u65ad\u53ef\u4fe1\u5ea6`}</p>
@@ -342,14 +351,19 @@ export default async function MatchDatabaseDetailPage({ params }: { params: Prom
         </div>
       </section>
 
-      <div className="mt-6">
-        <MatchAnalysisOverview
-          homeTeam={homeTeam}
-          awayTeam={awayTeam}
-          prediction={engineContext.prediction}
-          analysis={storedAiAnalysis}
-        />
-      </div>
+      <MatchAnalysisPanel
+        league={match.league || ""}
+        homeTeam={homeTeam}
+        awayTeam={awayTeam}
+        matchTime={match.match_time}
+        homeWin={match.home_win}
+        draw={match.draw}
+        awayWin={match.away_win}
+        aiScore={match.ai_score}
+        aiPick={match.ai_pick ?? null}
+        riskLevel={match.risk_level ?? null}
+        prediction={displayPrediction}
+      />
 
       <div className="hidden">
       <div className="mt-6">

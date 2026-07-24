@@ -68,7 +68,8 @@ export async function GET(request: Request) {
     }
 
     const rows = (data ?? []).map((row) => ({
-      id: row.id ?? row.external_id,
+      id: row.external_id,
+      external_id: row.external_id,
       league: row.league,
       home_team: row.home_team,
       away_team: row.away_team,

@@ -49,7 +49,7 @@ function toFeaturedMatch(match: SyncedMatch, index: number): FeaturedMatch {
   const aiConsistency = toNumber(match.ai_consistency);
   const homeTeam: MatchTeam = { id: match.home_team_id ?? undefined, name: homeTeamName, englishName: homeName, shortName: shortName(homeTeamName), color: colors[index % colors.length], secondaryColor: colors[(index + 1) % colors.length] };
   const awayTeam: MatchTeam = { id: match.away_team_id ?? undefined, name: awayTeamName, englishName: awayName, shortName: shortName(awayTeamName), color: colors[(index + 2) % colors.length], secondaryColor: colors[(index + 3) % colors.length] };
-  return decodeUnicodeDeep({ id: match.external_id, league: decodeUnicode(match.league), date: formattedDate.date, time: formattedDate.time, homeTeam, awayTeam, aiScore, aiConsistency, prediction: decodeUnicode(match.ai_pick || "\u6570\u636e\u540c\u6b65\u4e2d"), score: decodeUnicode("\u5f85\u751f\u6210"), risk: decodeUnicode(match.risk_level || "\u4e2d") as MatchRisk, homeWin, draw, awayWin });
+  return decodeUnicodeDeep({ external_id: match.external_id || null, id: match.external_id || "", league: decodeUnicode(match.league), date: formattedDate.date, time: formattedDate.time, homeTeam, awayTeam, aiScore, aiConsistency, prediction: decodeUnicode(match.ai_pick || "\u6570\u636e\u540c\u6b65\u4e2d"), score: decodeUnicode("\u5f85\u751f\u6210"), risk: decodeUnicode(match.risk_level || "\u4e2d") as MatchRisk, homeWin, draw, awayWin });
 }
 
 const copy = {

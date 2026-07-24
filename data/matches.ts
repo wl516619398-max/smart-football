@@ -509,6 +509,7 @@ const featuredMeta: Record<string, Pick<FeaturedMatch, "aiScore" | "prediction" 
 
 export const featured: FeaturedMatch[] = matchDetails.map((match) => ({
   id: match.id,
+  external_id: match.id,
   league: match.league,
   date: match.date,
   time: match.time,

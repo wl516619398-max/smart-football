@@ -34,7 +34,7 @@ function toRecommendation(match: FootballMatch, index: number): FeaturedMatch {
   const validDate = !Number.isNaN(date.getTime());
   const riskLevel: MatchRisk = risk.riskLevel;
 
-  return { id: match.id, league: match.league, date: validDate ? date.toISOString().slice(0, 10) : match.date.slice(0, 10), time: validDate ? date.toISOString().slice(11, 16) : "待定", homeTeam: toTeam(match.homeTeam, index), awayTeam: toTeam(match.awayTeam, index + 1), aiScore: confidence, prediction: recommendation, score: scores[0].replace("-", ":"), risk: riskLevel, homeWin: probabilities.homeWin, draw: probabilities.draw, awayWin: probabilities.awayWin };
+  return { id: match.id, external_id: match.id, league: match.league, date: validDate ? date.toISOString().slice(0, 10) : match.date.slice(0, 10), time: validDate ? date.toISOString().slice(11, 16) : "待定", homeTeam: toTeam(match.homeTeam, index), awayTeam: toTeam(match.awayTeam, index + 1), aiScore: confidence, prediction: recommendation, score: scores[0].replace("-", ":"), risk: riskLevel, homeWin: probabilities.homeWin, draw: probabilities.draw, awayWin: probabilities.awayWin };
 }
 
 async function getRecommendationMatches(): Promise<{ matches: FeaturedMatch[]; sourceMatches: FootballMatch[]; fallback: boolean }> {

@@ -27,6 +27,7 @@ export type MatchRisk = "低" | "中" | "高";
 
 export type FeaturedMatch = {
   id: string;
+  external_id?: string | null;
   league: string;
   date: string;
   time: string;
