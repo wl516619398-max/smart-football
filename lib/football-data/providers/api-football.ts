@@ -8,8 +8,8 @@ import type { FootballApiHistory, FootballApiOdds, FootballApiTeamStatistics } f
 export function createApiFootballProvider(): FootballDataProvider {
   return {
     name: "api-football",
-    async getMatches() {
-      return getUpcomingMatches();
+    async getMatches(query) {
+      return getUpcomingMatches(query);
     },
     async getTeams(matches = []) {
       return getTeamsFromMatches(matches);

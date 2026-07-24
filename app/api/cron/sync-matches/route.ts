@@ -3,13 +3,12 @@ import { getFootballDataProvider } from "@/lib/football/data-provider";
 import { getDynamicMatchPrediction } from "@/lib/football/dynamic-prediction";
 import type { FootballMatch, FootballStanding } from "@/lib/football/types";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { filterTodayHotMatches } from "@/lib/football/hot-leagues";
 import { getUpcomingDateWindow } from "@/lib/football/date-window";
 import { generateAndSaveFeaturedMatchAnalyses } from "@/lib/ai/match-analysis-generator";
 
 export const dynamic = "force-dynamic";
 
-const SYNC_WINDOW_DAYS = 0;
+const SYNC_WINDOW_DAYS = 30;
 const SHANGHAI_TIME_ZONE = "Asia/Shanghai";
 
 function isAuthorized(request: Request) {
@@ -21,7 +20,23 @@ function isAuthorized(request: Request) {
 
 function getSyncWindow() {
   const window = getUpcomingDateWindow(SYNC_WINDOW_DAYS);
-  return { from: window.startKey, to: window.startKey };
+  return { from: window.startKey, to: window.endKey };
+}
+
+function filterUpcomingMatches(matches: FootballMatch[], from: string, to: string, limit = 500) {
+  const start = Date.parse(`${from}T00:00:00+08:00`);
+  const end = Date.parse(`${to}T23:59:59+08:00`);
+  const seen = new Set<string>();
+
+  return matches
+    .filter((match) => {
+      const timestamp = Date.parse(match.date);
+      if (!Number.isFinite(timestamp) || timestamp < start || timestamp > end || seen.has(match.id)) return false;
+      seen.add(match.id);
+      return true;
+    })
+    .sort((left, right) => Date.parse(left.date) - Date.parse(right.date))
+    .slice(0, limit);
 }
 
 function getShanghaiDateKey(value: string) {
@@ -75,7 +90,7 @@ async function getMatchesWithFallback(query: { from: string; to: string }) {
   const configuredSource = process.env.FOOTBALL_API_PROVIDER?.trim().toLowerCase() || configuredProvider.kind;
 
   try {
-    const matches = filterTodayHotMatches(await configuredProvider.getMatches(query));
+    const matches = filterUpcomingMatches(await configuredProvider.getMatches(query), query.from, query.to);
     if (matches.length > 0) {
       return {
         matches,
@@ -88,9 +103,50 @@ async function getMatchesWithFallback(query: { from: string; to: string }) {
   }
 
   const mockProvider = getFootballDataProvider("mock");
-  const matches = filterTodayHotMatches(await mockProvider.getMatches(query));
+  const matches = filterUpcomingMatches(await mockProvider.getMatches(query), query.from, query.to);
 
   return { matches, provider: configuredSource, usedMockFallback: true };
+}
+
+async function startSyncLog(supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>, query: { from: string; to: string }, provider: string) {
+  const { data, error } = await supabase
+    .from("api_sync_logs")
+    .insert({
+      provider,
+      sync_type: "matches",
+      status: "running",
+      window_start: `${query.from}T00:00:00+08:00`,
+      window_end: `${query.to}T23:59:59+08:00`,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("[cron/sync] api_sync_logs start failed:", error.message);
+    return null;
+  }
+
+  return typeof data?.id === "string" ? data.id : null;
+}
+
+async function finishSyncLog(
+  supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+  id: string | null,
+  values: { status: "success" | "error"; fetchedCount: number; upsertedCount: number; errorMessage?: string },
+) {
+  if (!id) return;
+  const { error } = await supabase
+    .from("api_sync_logs")
+    .update({
+      status: values.status,
+      fetched_count: values.fetchedCount,
+      upserted_count: values.upsertedCount,
+      error_message: values.errorMessage ?? null,
+      completed_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) console.error("[cron/sync] api_sync_logs completion failed:", error.message);
 }
 
 async function syncMatches(request: Request) {
@@ -109,9 +165,15 @@ async function syncMatches(request: Request) {
     );
   }
 
+  const query = getSyncWindow();
+  const configuredProvider = process.env.FOOTBALL_API_PROVIDER?.trim().toLowerCase() || getFootballDataProvider().kind;
+  const syncLogId = await startSyncLog(supabase, query, configuredProvider);
+  let fetchedCount = 0;
+  let upsertedCount = 0;
+
   try {
-    const query = getSyncWindow();
     const { matches, provider, usedMockFallback } = await getMatchesWithFallback(query);
+    fetchedCount = matches.length;
     const rows = Array.from(
       new Map((await Promise.all(matches.map(toMatchRow))).map((row) => [row.external_id, row])).values(),
     );
@@ -119,6 +181,7 @@ async function syncMatches(request: Request) {
     const leagues = uniqueLeagueNames(matches, []);
 
     if (!rows.length) {
+      await finishSyncLog(supabase, syncLogId, { status: "success", fetchedCount, upsertedCount: 0 });
       return NextResponse.json({
         success: true,
         provider,
@@ -139,6 +202,7 @@ async function syncMatches(request: Request) {
       .select("external_id");
 
     if (error) throw new Error(error.message);
+    upsertedCount = data?.length ?? rows.length;
     const analysis = await generateAndSaveFeaturedMatchAnalyses(supabase, matches, rows);
 
     const todayKey = getShanghaiDateKey(new Date().toISOString());
@@ -158,11 +222,17 @@ async function syncMatches(request: Request) {
       upcomingMatches,
       leagues,
       leagueCount: leagues.length,
-      insertedOrUpdated: data?.length ?? rows.length,
+      insertedOrUpdated: upsertedCount,
       analysisGenerated: analysis.generated,
       analysisFailed: analysis.failed,
     });
   } catch (error: unknown) {
+    await finishSyncLog(supabase, syncLogId, {
+      status: "error",
+      fetchedCount,
+      upsertedCount,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
     console.error("Cron match sync failed:", error);
     return NextResponse.json(
       {

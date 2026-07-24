@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTodayHotFixturesWithSource } from "@/lib/football/fixture-service";
-import { footballMatchesToDynamicMatchCenterRows, type MatchCenterRow } from "@/lib/football/match-center";
-import { getUpcomingDateWindow, isTodayOrFuture, toShanghaiDateKey } from "@/lib/football/date-window";
+import { getUpcomingDateWindow } from "@/lib/football/date-window";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -12,44 +10,40 @@ function positiveInteger(value: string | null, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function filterAndPageFallback(rows: MatchCenterRow[], url: URL, page: number, pageSize: number) {
-  const date = url.searchParams.get("date")?.trim() ?? "";
-  const league = url.searchParams.get("league")?.trim() ?? "";
-  const search = url.searchParams.get("search")?.trim().toLowerCase() ?? "";
-  const eligibleRows = rows
-    .filter((row) => !league || row.league === league)
-    .filter((row) => !search || `${row.home_team} ${row.away_team}`.toLowerCase().includes(search));
-  const exactDateRows = date ? eligibleRows.filter((row) => toShanghaiDateKey(row.match_time) === date) : [];
-  const filtered = (date && exactDateRows.length ? exactDateRows : eligibleRows.filter((row) => isTodayOrFuture(row.match_time)))
-    .sort((left, right) => new Date(left.match_time).getTime() - new Date(right.match_time).getTime());
-  const from = (page - 1) * pageSize;
-  const data = filtered.slice(from, from + pageSize);
-  const total = filtered.length;
-
-  return { success: true, data, total, page, pageSize, totalPages: Math.ceil(total / pageSize), source: "football-api" };
-}
-
-async function getFootballApiFallback(url: URL, page: number, pageSize: number) {
-  try {
-    const result = await getTodayHotFixturesWithSource();
-    return { ...filterAndPageFallback(await footballMatchesToDynamicMatchCenterRows(result.matches), url, page, pageSize), source: result.source };
-  } catch (error) {
-    console.error("Failed to load football API fallback:", error);
-    return { success: false, data: [], total: 0, page, pageSize, totalPages: 0, source: "football-api" };
-  }
-}
-
 export async function GET(request: Request) {
-  const supabase = getSupabaseServerClient();
   const url = new URL(request.url);
   const page = positiveInteger(url.searchParams.get("page"), 1);
   const pageSize = Math.min(positiveInteger(url.searchParams.get("pageSize"), DEFAULT_PAGE_SIZE), MAX_PAGE_SIZE);
   const date = url.searchParams.get("date")?.trim() ?? "";
   const league = url.searchParams.get("league")?.trim() ?? "";
   const search = url.searchParams.get("search")?.trim() ?? "";
+  const hasNextPublicSupabaseUrl = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const hasSupabaseUrl = Boolean(process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const hasSupabaseServiceRoleKey = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-  if (supabase) try {
-    let query = supabase.from("matches").select("external_id,league,home_team,away_team,match_time,home_win,draw,away_win,ai_score", { count: "exact" }).order("match_time", { ascending: true });
+  console.log("[api/matches] Supabase environment", {
+    hasNextPublicSupabaseUrl,
+    hasSupabaseUrl,
+    hasSupabaseServiceRoleKey,
+  });
+
+  const supabase = getSupabaseServerClient();
+
+  console.info("[api/matches] query", { date, league, search, page, pageSize });
+
+  if (!supabase) {
+    console.error("[api/matches] Supabase is not configured");
+    return NextResponse.json(
+      { success: false, data: [], total: 0, page, pageSize, totalPages: 0, source: "supabase", error: "Supabase is not configured" },
+      { status: 503 },
+    );
+  }
+
+  try {
+    let query = supabase
+      .from("matches")
+      .select("id,external_id,league,home_team,away_team,match_time,home_logo,away_logo", { count: "exact" })
+      .order("match_time", { ascending: true });
 
     if (date) {
       const start = new Date(`${date}T00:00:00.000+08:00`);
@@ -68,17 +62,21 @@ export async function GET(request: Request) {
 
     const from = (page - 1) * pageSize;
     const { data, count, error } = await query.range(from, from + pageSize - 1);
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("[api/matches] Supabase query error", error.message, error);
+      throw new Error(error.message);
+    }
 
     const rows = data ?? [];
-    if (!rows.length) return NextResponse.json(await getFootballApiFallback(url, page, pageSize));
-
     const total = count ?? rows.length;
+    console.info("[api/matches] result", { count: rows.length, total });
+
     return NextResponse.json({ success: true, data: rows, total, page, pageSize, totalPages: Math.ceil(total / pageSize), source: "supabase" });
   } catch (error) {
-    console.error("Failed to load matches from Supabase, using football API fallback:", error);
-    return NextResponse.json(await getFootballApiFallback(url, page, pageSize));
+    console.error("[api/matches] request failed", error instanceof Error ? error.message : String(error), error);
+    return NextResponse.json(
+      { success: false, data: [], total: 0, page, pageSize, totalPages: 0, source: "supabase", error: error instanceof Error ? error.message : String(error) },
+      { status: 500 },
+    );
   }
-
-  return NextResponse.json(await getFootballApiFallback(url, page, pageSize));
 }

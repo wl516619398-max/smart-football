@@ -5,6 +5,11 @@ function formatDate(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+export type MatchDateRange = {
+  from?: string;
+  to?: string;
+};
+
 function normalizeFixture(fixture: ApiFixture): UpcomingMatch {
   const status = fixture.fixture.status?.short || "NS";
   return {
@@ -25,9 +30,9 @@ function normalizeFixture(fixture: ApiFixture): UpcomingMatch {
   };
 }
 
-export async function getUpcomingMatches(): Promise<UpcomingMatch[]> {
-  const start = new Date();
-  const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
+export async function getUpcomingMatches(range?: MatchDateRange): Promise<UpcomingMatch[]> {
+  const start = range?.from ? new Date(`${range.from}T00:00:00Z`) : new Date();
+  const end = range?.to ? new Date(`${range.to}T00:00:00Z`) : new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
   const fixtures = await footballApiRequest<ApiFixture[]>("fixtures", { from: formatDate(start), to: formatDate(end) });
   return fixtures.map(normalizeFixture);
 }

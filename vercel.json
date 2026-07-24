@@ -3,7 +3,7 @@
   "buildCommand": "npm run build",
   "crons": [
     {
-      "path": "/api/cron/sync-matches",
+      "path": "/api/cron/sync",
       "schedule": "0 0 * * *"
     }
   ]

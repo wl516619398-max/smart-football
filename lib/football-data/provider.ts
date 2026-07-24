@@ -2,11 +2,16 @@ import { createApiFootballProvider } from "./providers/api-football.ts";
 import { createMockFootballProvider } from "./providers/mock.ts";
 import type { FootballApiHistory, FootballApiOdds, FootballApiTeam, FootballApiTeamStatistics, UpcomingMatch } from "../football-api/types.ts";
 
+export type FootballDataProviderQuery = {
+  from?: string;
+  to?: string;
+};
+
 export type FootballDataProviderName = "mock" | "api-football";
 
 export type FootballDataProvider = {
   name: FootballDataProviderName;
-  getMatches(): Promise<UpcomingMatch[]>;
+  getMatches(query?: FootballDataProviderQuery): Promise<UpcomingMatch[]>;
   getTeams(matches?: UpcomingMatch[]): Promise<FootballApiTeam[]>;
   getTeamStats(matches?: UpcomingMatch[], teams?: FootballApiTeam[]): Promise<FootballApiTeamStatistics[]>;
   getOdds(matches?: UpcomingMatch[]): Promise<FootballApiOdds[]>;

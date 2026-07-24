@@ -20,14 +20,14 @@ async function getInitialMatches(): Promise<MatchesResponse> {
     const window = getUpcomingDateWindow();
     const { data, count, error } = await supabase
       .from("matches")
-      .select("external_id,league,home_team,away_team,match_time,home_win,draw,away_win,ai_score", { count: "exact" })
+      .select("id,external_id,league,home_team,away_team,match_time,home_logo,away_logo", { count: "exact" })
       .gte("match_time", window.start.toISOString())
       .lt("match_time", window.end.toISOString())
       .order("match_time", { ascending: true })
       .range(0, 19);
 
     if (!error && data?.length) {
-      const matches = decodeUnicodeDeep(data as SyncedMatch[]);
+      const matches = decodeUnicodeDeep(data as unknown as SyncedMatch[]);
       const total = count ?? matches.length;
       return { success: true, data: matches, total, page: 1, pageSize: 20, totalPages: Math.ceil(total / 20) };
     }

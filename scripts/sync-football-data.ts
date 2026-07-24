@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { getFootballDataProvider } from "../lib/football-data/provider.ts";
+import { getUpcomingDateWindow } from "../lib/football/date-window.ts";
 import type { FootballApiHistory, FootballApiOdds, FootballApiTeam, FootballApiTeamStatistics, UpcomingMatch } from "../lib/football-api/types.ts";
 
 const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -28,6 +29,43 @@ async function writeLog(entity: string, status: "success" | "error", fetchedCoun
     error_message: errorMessage ?? null,
   });
   if (error) console.error(`[sync:football] collection_logs write failed for ${entity}: ${error.message}`);
+}
+
+async function startApiSyncLog(from: string, to: string) {
+  const { data, error } = await supabase
+    .from("api_sync_logs")
+    .insert({
+      provider: provider.name,
+      sync_type: "matches",
+      status: "running",
+      window_start: `${from}T00:00:00+08:00`,
+      window_end: `${to}T23:59:59+08:00`,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error(`[sync:football] api_sync_logs start failed: ${error.message}`);
+    return null;
+  }
+
+  return typeof data?.id === "string" ? data.id : null;
+}
+
+async function finishApiSyncLog(id: string | null, values: { status: "success" | "error"; fetchedCount: number; upsertedCount: number; errorMessage?: string }) {
+  if (!id) return;
+  const { error } = await supabase
+    .from("api_sync_logs")
+    .update({
+      status: values.status,
+      fetched_count: values.fetchedCount,
+      upserted_count: values.upsertedCount,
+      error_message: values.errorMessage ?? null,
+      completed_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) console.error(`[sync:football] api_sync_logs completion failed: ${error.message}`);
 }
 
 async function step<T>(entity: string, operation: () => Promise<T>, count: (value: T) => number) {
@@ -98,22 +136,34 @@ async function upsertHistory(history: FootballApiHistory[]) {
 
 async function main() {
   console.info(`[sync:football] selected provider=${provider.name}`);
-  const matches = await step("matches", () => provider.getMatches(), (value) => value.length);
-  await step("matches-write", () => upsertMatches(matches), (value) => value);
+  const window = getUpcomingDateWindow(30);
+  const apiSyncLogId = await startApiSyncLog(window.startKey, window.endKey);
+  let fetchedCount = 0;
+  let upsertedCount = 0;
 
-  const teams = await step("teams", () => provider.getTeams(matches), (value) => value.length);
-  await step("teams-write", () => upsertTeams(teams), (value) => value);
+  try {
+    const matches = await step("matches", () => provider.getMatches({ from: window.startKey, to: window.endKey }), (value) => value.length);
+    fetchedCount = matches.length;
+    upsertedCount = await step("matches-write", () => upsertMatches(matches), (value) => value);
 
-  const teamStats = await step("team_statistics", () => provider.getTeamStats(matches, teams), (value) => value.length);
-  await step("team_statistics-write", () => upsertTeamStats(teamStats), (value) => value);
+    const teams = await step("teams", () => provider.getTeams(matches), (value) => value.length);
+    await step("teams-write", () => upsertTeams(teams), (value) => value);
 
-  const odds = await step("odds", () => provider.getOdds(matches), (value) => value.length);
-  await step("odds-write", () => upsertOdds(odds), (value) => value);
+    const teamStats = await step("team_statistics", () => provider.getTeamStats(matches, teams), (value) => value.length);
+    await step("team_statistics-write", () => upsertTeamStats(teamStats), (value) => value);
 
-  const history = await step("history", () => provider.getHistory(matches), (value) => value.length);
-  await step("history-write", () => upsertHistory(history), (value) => value);
+    const odds = await step("odds", () => provider.getOdds(matches), (value) => value.length);
+    await step("odds-write", () => upsertOdds(odds), (value) => value);
 
-  console.info(`[sync:football] complete provider=${provider.name} matches=${matches.length} teams=${teams.length}`);
+    const history = await step("history", () => provider.getHistory(matches), (value) => value.length);
+    await step("history-write", () => upsertHistory(history), (value) => value);
+
+    await finishApiSyncLog(apiSyncLogId, { status: "success", fetchedCount, upsertedCount });
+    console.info(`[sync:football] complete provider=${provider.name} matches=${matches.length} teams=${teams.length} window=${window.startKey}..${window.endKey}`);
+  } catch (error) {
+    await finishApiSyncLog(apiSyncLogId, { status: "error", fetchedCount, upsertedCount, errorMessage: formatError(error) });
+    throw error;
+  }
 }
 
 main().catch((error) => {
