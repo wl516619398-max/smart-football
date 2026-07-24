@@ -11,7 +11,19 @@ import { decodeUnicode, decodeUnicodeDeep } from "@/lib/utils/decode-unicode";
 import type { MatchCenterRow } from "@/lib/football/match-center";
 import type { FeaturedMatch, MatchRisk, MatchTeam } from "@/types/match";
 
-export type SyncedMatch = MatchCenterRow;
+export type SyncedMatch = Omit<MatchCenterRow, "home_win" | "draw" | "away_win" | "ai_score"> & {
+  id?: string | null;
+  home_win?: number | null;
+  draw?: number | null;
+  away_win?: number | null;
+  home_win_probability?: number | null;
+  draw_probability?: number | null;
+  away_win_probability?: number | null;
+  ai_consistency?: number | null;
+  ai_score?: number | string | null;
+  ai_pick?: string | null;
+  risk_level?: string | null;
+};
 export type MatchesResponse = { success: boolean; data: SyncedMatch[]; total: number; page: number; pageSize: number; totalPages: number };
 
 const leagueOptions = ["Premier League", "La Liga", "Bundesliga", "Serie A", "Ligue 1", "UEFA Champions League"];
@@ -19,15 +31,25 @@ const colors = ["#2563EB", "#22C55E", "#A855F7", "#F59E0B"];
 
 function shortName(name: string) { return name.split(" ").map((part) => part[0]).join("").slice(0, 3).toUpperCase() || name.slice(0, 3).toUpperCase(); }
 
+function toNumber(value: unknown, fallback: number | null = null) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function toFeaturedMatch(match: SyncedMatch, index: number): FeaturedMatch {
   const formattedDate = formatMatchDateTime(match.match_time);
   const homeName = decodeUnicode(match.home_team);
   const awayName = decodeUnicode(match.away_team);
   const homeTeamName = getTeamDisplayName(homeName);
   const awayTeamName = getTeamDisplayName(awayName);
+  const homeWin = toNumber(match.home_win_probability ?? match.home_win, 0);
+  const draw = toNumber(match.draw_probability ?? match.draw, 0);
+  const awayWin = toNumber(match.away_win_probability ?? match.away_win, 0);
+  const aiScore = toNumber(match.ai_score);
+  const aiConsistency = toNumber(match.ai_consistency);
   const homeTeam: MatchTeam = { id: match.home_team_id ?? undefined, name: homeTeamName, englishName: homeName, shortName: shortName(homeTeamName), color: colors[index % colors.length], secondaryColor: colors[(index + 1) % colors.length] };
   const awayTeam: MatchTeam = { id: match.away_team_id ?? undefined, name: awayTeamName, englishName: awayName, shortName: shortName(awayTeamName), color: colors[(index + 2) % colors.length], secondaryColor: colors[(index + 3) % colors.length] };
-  return decodeUnicodeDeep({ id: match.external_id, league: decodeUnicode(match.league), date: formattedDate.date, time: formattedDate.time, homeTeam, awayTeam, aiScore: match.ai_score, prediction: decodeUnicode(match.ai_pick || "\u6570\u636e\u540c\u6b65\u4e2d"), score: decodeUnicode("\u5f85\u751f\u6210"), risk: decodeUnicode(match.risk_level || "\u4e2d") as MatchRisk, homeWin: match.home_win, draw: match.draw, awayWin: match.away_win });
+  return decodeUnicodeDeep({ id: match.external_id, league: decodeUnicode(match.league), date: formattedDate.date, time: formattedDate.time, homeTeam, awayTeam, aiScore, aiConsistency, prediction: decodeUnicode(match.ai_pick || "\u6570\u636e\u540c\u6b65\u4e2d"), score: decodeUnicode("\u5f85\u751f\u6210"), risk: decodeUnicode(match.risk_level || "\u4e2d") as MatchRisk, homeWin, draw, awayWin });
 }
 
 const copy = {

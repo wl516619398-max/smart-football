@@ -33,6 +33,7 @@ export type FeaturedMatch = {
   homeTeam: MatchTeam;
   awayTeam: MatchTeam;
   aiScore: number | null;
+  aiConsistency?: number | null;
   prediction: string;
   score: string;
   risk: MatchRisk;
