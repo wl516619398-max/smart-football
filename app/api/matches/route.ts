@@ -52,13 +52,13 @@ export async function GET(request: Request) {
     let query = supabase.from("matches").select("external_id,league,home_team,away_team,match_time,home_win,draw,away_win,ai_score", { count: "exact" }).order("match_time", { ascending: true });
 
     if (date) {
-      const start = new Date(`${date}T00:00:00.000Z`);
+      const start = new Date(`${date}T00:00:00.000+08:00`);
       const end = new Date(start);
       end.setUTCDate(end.getUTCDate() + 1);
       if (!Number.isNaN(start.getTime())) query = query.gte("match_time", start.toISOString()).lt("match_time", end.toISOString());
     } else {
       const window = getUpcomingDateWindow();
-      query = query.gte("match_time", window.start.toISOString());
+      query = query.gte("match_time", window.start.toISOString()).lt("match_time", window.end.toISOString());
     }
     if (league) query = query.eq("league", league);
     if (search) {

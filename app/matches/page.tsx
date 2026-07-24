@@ -22,6 +22,7 @@ async function getInitialMatches(): Promise<MatchesResponse> {
       .from("matches")
       .select("external_id,league,home_team,away_team,match_time,home_win,draw,away_win,ai_score", { count: "exact" })
       .gte("match_time", window.start.toISOString())
+      .lt("match_time", window.end.toISOString())
       .order("match_time", { ascending: true })
       .range(0, 19);
 
